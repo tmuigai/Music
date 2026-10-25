@@ -1,0 +1,6 @@
+{
+  "name": "REPLAY 99",
+  "description": "Your music. Your machine. Your rules. 1990s underground music equipment deck, cassette player, Discman, DJ deck, lyrics room, and workshop.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
