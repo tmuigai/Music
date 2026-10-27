@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.EqualizerState
+import com.example.model.TapeDegradationState
 import com.example.ui.components.StereoVuMeters
 import com.example.ui.theme.AcidGreen
 import com.example.ui.theme.BorderHardware
@@ -63,6 +65,7 @@ import kotlin.math.sin
 @Composable
 fun SoundLaboratoryScreen(
     eqState: EqualizerState,
+    tapeDegradation: TapeDegradationState,
     visualizerBands: FloatArray,
     vuMeterLeft: Float,
     vuMeterRight: Float,
@@ -72,6 +75,9 @@ fun SoundLaboratoryScreen(
     onSetVirtualizer: (Int) -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
     onApplyPreset: (String) -> Unit,
+    onToggleTapeHiss: () -> Unit,
+    onToggleWowFlutter: () -> Unit,
+    onSetSaturationWarmth: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
@@ -126,6 +132,55 @@ fun SoundLaboratoryScreen(
                             checkedTrackColor = GunmetalLight
                         )
                     )
+                }
+            }
+        }
+
+        // Audio Patch Bay / Hardware Signal Flow
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(GunmetalDark)
+                    .border(1.dp, BorderHardware, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "AUDIO PATCH BAY // SIGNAL ROUTING",
+                            fontFamily = ChakraPetchFont,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = TextSecondary
+                        )
+                        Text(
+                            text = "DIRECT 44.1kHz",
+                            fontFamily = ShareTechMonoFont,
+                            fontSize = 9.sp,
+                            color = AcidGreen
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SignalNode(label = "INPUT", active = true, color = AcidGreen)
+                        SignalFlowArrow()
+                        SignalNode(label = "PREAMP", active = true, color = BurntOrange)
+                        SignalFlowArrow()
+                        SignalNode(label = "5-BAND EQ", active = eqState.isEnabled, color = if (eqState.isEnabled) accentColor else TextMuted)
+                        SignalFlowArrow()
+                        SignalNode(label = "DEGRADE", active = tapeDegradation.tapeHissEnabled || tapeDegradation.wowFlutterEnabled, color = BurntOrange)
+                        SignalFlowArrow()
+                        SignalNode(label = "OUT D/A", active = true, color = LcdCyan)
+                    }
                 }
             }
         }
@@ -401,5 +456,172 @@ fun SoundLaboratoryScreen(
                 }
             }
         }
+
+        // Tape Degradation Simulator (Hiss, Wow & Flutter, Magnetic Saturation)
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(GunmetalDark)
+                    .border(1.dp, BorderHardware, RoundedCornerShape(4.dp))
+                    .padding(12.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "TAPE DEGRADATION SIMULATOR",
+                                fontFamily = ChakraPetchFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = BurntOrange
+                            )
+                            Text(
+                                text = "ANALOG FLUTTER, MAGNETIC HISS & WARMTH",
+                                fontFamily = ShareTechMonoFont,
+                                fontSize = 9.sp,
+                                color = TextMuted
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .background(if (tapeDegradation.tapeHissEnabled || tapeDegradation.wowFlutterEnabled) BurntOrange else MatteBlack)
+                                .border(1.dp, BorderHardware, RoundedCornerShape(2.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (tapeDegradation.tapeHissEnabled || tapeDegradation.wowFlutterEnabled) "DEGRADE ACTIVE" else "CLEAN TAPE",
+                                fontFamily = ChakraPetchFont,
+                                fontSize = 9.sp,
+                                color = if (tapeDegradation.tapeHissEnabled || tapeDegradation.wowFlutterEnabled) MatteBlack else TextSecondary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Tape Hiss Toggle
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(if (tapeDegradation.tapeHissEnabled) GunmetalLight else MatteBlack)
+                                .border(1.dp, if (tapeDegradation.tapeHissEnabled) BurntOrange else BorderHardware, RoundedCornerShape(3.dp))
+                                .clickable {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    onToggleTapeHiss()
+                                }
+                                .padding(horizontal = 8.dp, vertical = 8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(text = "TAPE HISS", fontFamily = ChakraPetchFont, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = TextPrimary)
+                                    Text(text = "TYPE-I FERRIC", fontFamily = ShareTechMonoFont, fontSize = 8.sp, color = TextMuted)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(if (tapeDegradation.tapeHissEnabled) BurntOrange else GunmetalMedium)
+                                )
+                            }
+                        }
+
+                        // Wow & Flutter Toggle
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(if (tapeDegradation.wowFlutterEnabled) GunmetalLight else MatteBlack)
+                                .border(1.dp, if (tapeDegradation.wowFlutterEnabled) AcidGreen else BorderHardware, RoundedCornerShape(3.dp))
+                                .clickable {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    onToggleWowFlutter()
+                                }
+                                .padding(horizontal = 8.dp, vertical = 8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(text = "WOW & FLUTTER", fontFamily = ChakraPetchFont, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = TextPrimary)
+                                    Text(text = "REEL WOBBLE", fontFamily = ShareTechMonoFont, fontSize = 8.sp, color = TextMuted)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(if (tapeDegradation.wowFlutterEnabled) AcidGreen else GunmetalMedium)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Magnetic Saturation Warmth Slider
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "TAPE SATURATION WARMTH", fontFamily = ChakraPetchFont, fontSize = 10.sp, color = TextSecondary)
+                            Text(text = "${(tapeDegradation.saturationWarmth * 100).toInt()}%", fontFamily = ShareTechMonoFont, fontSize = 10.sp, color = BurntOrange)
+                        }
+                        Slider(
+                            value = tapeDegradation.saturationWarmth,
+                            onValueChange = { onSetSaturationWarmth(it) },
+                            valueRange = 0.0f..1.0f,
+                            colors = SliderDefaults.colors(thumbColor = BurntOrange, activeTrackColor = BurntOrange)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
+
+@Composable
+private fun SignalNode(label: String, active: Boolean, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(if (active) color else GunmetalMedium)
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = label,
+            fontFamily = ShareTechMonoFont,
+            fontSize = 8.sp,
+            color = if (active) color else TextMuted
+        )
+    }
+}
+
+@Composable
+private fun SignalFlowArrow() {
+    Text(
+        text = "→",
+        fontFamily = ShareTechMonoFont,
+        fontSize = 10.sp,
+        color = TextMuted
+    )
+}
+

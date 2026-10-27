@@ -13,8 +13,8 @@ data class TrackEntity(
     val contentUri: String,
     val albumArtUri: String? = null,
     val path: String = "",
-    val genre: String = "Underground",
-    val year: Int = 1999,
+    val genre: String = "Local Audio",
+    val year: Int = 0,
     val dateAdded: Long = System.currentTimeMillis(),
     val replayCount: Int = 0,
     val lastPlayedMs: Long = 0,
@@ -35,6 +35,26 @@ data class MixtapeEntity(
     val sideBTrackIds: String, // Comma-separated track IDs
     val durationMinutes: Int = 60,
     val stickerDataJson: String = "[]",
+    val createdMs: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "minidiscs")
+data class MiniDiscEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val discTitle: String,
+    val labelText: String = "MD-DATA / 74 MIN",
+    val colorHex: String = "#0055AA",
+    val atracMode: String = "SP", // SP (Standard Play), LP2, LP4
+    val trackIds: String = "",
+    val createdMs: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "track_bookmarks")
+data class TrackBookmarkEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val trackId: Long,
+    val timestampMs: Long,
+    val label: String, // "Beat Drop", "Guitar Solo", "Favorite Verse", etc.
     val createdMs: Long = System.currentTimeMillis()
 )
 
@@ -77,5 +97,5 @@ data class RadioPresetEntity(
     val freqMhz: Float,
     val streamUrl: String = "",
     val isLocalShuffle: Boolean = false,
-    val genre: String = "Underground 90s"
+    val genre: String = "Local Audio"
 )

@@ -9,12 +9,14 @@ import androidx.room.RoomDatabase
     entities = [
         TrackEntity::class,
         MixtapeEntity::class,
+        MiniDiscEntity::class,
+        TrackBookmarkEntity::class,
         ListeningHistoryEntity::class,
         RecordingEntity::class,
         ObsessionProfileEntity::class,
         RadioPresetEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class ReplayDatabase : RoomDatabase() {

@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.MixtapeEntity
 import com.example.model.Track
-import com.example.ui.screens.LibraryTrackRow
+import com.example.ui.components.LibraryTrackRow
 import com.example.ui.theme.AcidGreen
 import com.example.ui.theme.BorderHardware
 import com.example.ui.theme.BurntOrange
@@ -75,6 +75,7 @@ fun MixtapeLibraryScreen(
     onLoadMixtape: (MixtapeEntity) -> Unit,
     onCreateMixtape: (String, String, String, String, String, Boolean, List<Long>, List<Long>, Int) -> Unit,
     onRescanLibrary: () -> Unit,
+    onTriggerFilePicker: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
@@ -127,6 +128,20 @@ fun MixtapeLibraryScreen(
                         Text(text = "SCAN MEDIA", fontFamily = ChakraPetchFont, fontSize = 9.sp, color = TextSecondary)
                     }
 
+                    // Import Audio Files button
+                    Box(
+                        modifier = Modifier
+                            .background(GunmetalLight)
+                            .border(1.dp, accentColor, RoundedCornerShape(2.dp))
+                            .clickable {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                onTriggerFilePicker()
+                            }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                    ) {
+                        Text(text = "IMPORT", fontFamily = ChakraPetchFont, fontSize = 9.sp, color = accentColor)
+                    }
+
                     // Record new mixtape button
                     Box(
                         modifier = Modifier
@@ -139,10 +154,10 @@ fun MixtapeLibraryScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "+ REC MIXTAPE",
+                            text = "+ REC TAPE",
                             fontFamily = ChakraPetchFont,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
+                            fontSize = 9.sp,
                             color = MatteBlack
                         )
                     }
@@ -285,15 +300,60 @@ fun MixtapeLibraryScreen(
             }
         } else {
             // Track / Album / Artist List
-            items(filteredTracks) { track ->
-                LibraryTrackRow(
-                    index = allTracks.indexOf(track) + 1,
-                    track = track,
-                    isCurrent = currentTrack?.id == track.id,
-                    isPlaying = currentTrack?.id == track.id && isPlaying,
-                    accentColor = accentColor,
-                    onClick = { onTrackSelect(track) }
-                )
+            if (filteredTracks.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(GunmetalDark)
+                            .border(1.dp, BorderHardware, RoundedCornerShape(4.dp))
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (searchQuery.isBlank()) "NO TRACKS IN CRATE" else "NO TRACKS MATCHING \"$searchQuery\"",
+                                fontFamily = ChakraPetchFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Scan device storage or import real audio files directly.",
+                                fontFamily = ShareTechMonoFont,
+                                fontSize = 10.sp,
+                                color = TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = onRescanLibrary,
+                                    colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+                                ) {
+                                    Text(text = "SCAN STORAGE", fontFamily = ChakraPetchFont, color = MatteBlack, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                }
+                                Button(
+                                    onClick = onTriggerFilePicker,
+                                    colors = ButtonDefaults.buttonColors(containerColor = BurntOrange)
+                                ) {
+                                    Text(text = "IMPORT FILES", fontFamily = ChakraPetchFont, color = MatteBlack, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                items(filteredTracks) { track ->
+                    LibraryTrackRow(
+                        index = allTracks.indexOf(track) + 1,
+                        track = track,
+                        isCurrent = currentTrack?.id == track.id,
+                        isPlaying = currentTrack?.id == track.id && isPlaying,
+                        accentColor = accentColor,
+                        onClick = { onTrackSelect(track) }
+                    )
+                }
             }
         }
     }

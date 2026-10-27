@@ -17,9 +17,13 @@ import com.example.model.DjDeckState
 import com.example.model.DjSingleDeck
 import com.example.model.HardwareNavScreen
 import com.example.model.PlaybackState
+import com.example.model.FourTrackState
+import com.example.model.PortaChannelState
 import com.example.model.RepeatMode
 import com.example.model.TapeSide
 import com.example.model.Track
+import com.example.model.VinylState
+import kotlin.math.sin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -70,6 +74,12 @@ class ReplayAudioEngine(
 
     private val _djState = MutableStateFlow(DjDeckState())
     val djState: StateFlow<DjDeckState> = _djState.asStateFlow()
+
+    private val _vinylState = MutableStateFlow(VinylState())
+    val vinylState: StateFlow<VinylState> = _vinylState.asStateFlow()
+
+    private val _fourTrackState = MutableStateFlow(FourTrackState())
+    val fourTrackState: StateFlow<FourTrackState> = _fourTrackState.asStateFlow()
 
     // Cassette Side A / Side B tracks
     private var currentCassetteSide: TapeSide = TapeSide.SIDE_A
@@ -138,10 +148,39 @@ class ReplayAudioEngine(
                 cdRotationAngle = cdAngle
             )
 
+            // Wow & Flutter analog tape pitch modulation
+            val isWowFlutter = effectsManager.tapeDegradation.value.wowFlutterEnabled
+            if (isWowFlutter) {
+                val wobble = 1.0f + (0.007f * sin(pos / 250.0)).toFloat()
+                mainPlayer.playbackParameters = PlaybackParameters(wobble * _playbackState.value.playbackSpeed)
+            }
+
             effectsManager.updateVisualizerFrame(isPlaying = true, positionMs = pos)
             updateDjDeckAState()
+
+            // Vinyl Platter rotation
+            val spinDelta = if (_vinylState.value.rpm == 45) 8.5f else 6.3f
+            _vinylState.value = _vinylState.value.copy(
+                platterRotationDeg = (_vinylState.value.platterRotationDeg + spinDelta) % 360f
+            )
+
+            // Four-track Portastudio VU meter dynamics
+            val curVuL = effectsManager.vuMeterLeft.value
+            val curVuR = effectsManager.vuMeterRight.value
+            val ft = _fourTrackState.value
+            val updatedChannels = ft.channels.mapIndexed { idx, ch ->
+                val base = if (idx % 2 == 0) curVuL else curVuR
+                val dynamicLevel = (base * ch.faderLevel * (0.8f + idx * 0.1f)).coerceIn(0.05f, 0.98f)
+                ch.copy(vuLevel = dynamicLevel)
+            }
+            _fourTrackState.value = ft.copy(channels = updatedChannels)
         } else {
             effectsManager.updateVisualizerFrame(isPlaying = false, positionMs = _playbackState.value.positionMs)
+            val ft = _fourTrackState.value
+            val decayedChannels = ft.channels.map { ch ->
+                ch.copy(vuLevel = (ch.vuLevel * 0.85f).coerceAtLeast(0.05f))
+            }
+            _fourTrackState.value = ft.copy(channels = decayedChannels)
         }
 
         // DJ Deck B update
@@ -332,6 +371,101 @@ class ReplayAudioEngine(
     }
 
     fun getCurrentCassetteSide(): TapeSide = currentCassetteSide
+
+    fun ejectCassette() {
+        mainPlayer.pause()
+        _playbackState.value = _playbackState.value.copy(
+            isCassetteInserted = false,
+            isPlaying = false
+        )
+    }
+
+    fun insertCassette() {
+        _playbackState.value = _playbackState.value.copy(
+            isCassetteInserted = true
+        )
+    }
+
+    // VINYL TURNTABLE OPERATIONS
+    fun setVinylRpm(rpm: Int) {
+        val validRpm = if (rpm == 45) 45 else 33
+        _vinylState.value = _vinylState.value.copy(rpm = validRpm)
+    }
+
+    fun setVinylPitch(pitchPercent: Float) {
+        val clamped = pitchPercent.coerceIn(-8.0f, 8.0f)
+        _vinylState.value = _vinylState.value.copy(pitchPercent = clamped)
+        val actualSpeed = (1.0f + clamped / 100f).coerceIn(0.5f, 2.0f)
+        mainPlayer.playbackParameters = PlaybackParameters(actualSpeed)
+        _playbackState.value = _playbackState.value.copy(playbackSpeed = actualSpeed)
+    }
+
+    fun cueTonearm(cued: Boolean) {
+        _vinylState.value = _vinylState.value.copy(isTonearmCued = cued)
+        if (cued) {
+            // Needle dropped on vinyl -> resume playback
+            if (_playbackState.value.currentTrack != null) {
+                mainPlayer.play()
+            }
+        } else {
+            // Tonearm lifted -> pause
+            mainPlayer.pause()
+        }
+    }
+
+    fun scratchVinyl(deltaDeg: Float) {
+        val deltaMs = (deltaDeg * 25f).toLong()
+        seekRelative(deltaMs)
+        _vinylState.value = _vinylState.value.copy(
+            platterRotationDeg = (_vinylState.value.platterRotationDeg + deltaDeg) % 360f
+        )
+    }
+
+    // FOUR-TRACK PORTASTUDIO OPERATIONS
+    fun setFourTrackSpeed(isHigh: Boolean) {
+        _fourTrackState.value = _fourTrackState.value.copy(isHighSpeed = isHigh)
+        // 9.5 cm/s = double speed studio playback; 4.75 cm/s = standard speed
+        val speed = if (isHigh) 1.5f else 1.0f
+        mainPlayer.playbackParameters = PlaybackParameters(speed)
+        _playbackState.value = _playbackState.value.copy(playbackSpeed = speed)
+    }
+
+    fun setFourTrackPitch(pitchPercent: Float) {
+        val clamped = pitchPercent.coerceIn(-12.0f, 12.0f)
+        _fourTrackState.value = _fourTrackState.value.copy(pitchKnob = clamped)
+        val baseSpeed = if (_fourTrackState.value.isHighSpeed) 1.5f else 1.0f
+        val finalSpeed = (baseSpeed * (1.0f + clamped / 100f)).coerceIn(0.5f, 2.0f)
+        mainPlayer.playbackParameters = PlaybackParameters(finalSpeed)
+        _playbackState.value = _playbackState.value.copy(playbackSpeed = finalSpeed)
+    }
+
+    fun setFourTrackMasterFader(fader: Float) {
+        val clamped = fader.coerceIn(0.0f, 1.0f)
+        _fourTrackState.value = _fourTrackState.value.copy(masterFader = clamped)
+        mainPlayer.volume = clamped
+    }
+
+    fun setFourTrackChannelFader(channelNum: Int, level: Float) {
+        val ft = _fourTrackState.value
+        val updated = ft.channels.map { ch ->
+            if (ch.channelNumber == channelNum) ch.copy(faderLevel = level.coerceIn(0f, 1f)) else ch
+        }
+        _fourTrackState.value = ft.copy(channels = updated)
+    }
+
+    fun toggleFourTrackRecArm(channelNum: Int) {
+        val ft = _fourTrackState.value
+        val updated = ft.channels.map { ch ->
+            if (ch.channelNumber == channelNum) ch.copy(isArmedForRec = !ch.isArmedForRec) else ch
+        }
+        _fourTrackState.value = ft.copy(channels = updated)
+    }
+
+    fun toggleFourTrackDbx() {
+        val next = !_fourTrackState.value.isDbxNoiseReductionOn
+        _fourTrackState.value = _fourTrackState.value.copy(isDbxNoiseReductionOn = next)
+        effectsManager.setEnabled(next)
+    }
 
     // DJ DECK OPERATIONS
     fun setDjTrackA(track: Track) {

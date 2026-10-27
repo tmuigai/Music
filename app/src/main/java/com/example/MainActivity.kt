@@ -3,8 +3,10 @@ package com.example
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -27,18 +29,22 @@ import com.example.ui.ReplayViewModel
 import com.example.ui.components.HardwareHeader
 import com.example.ui.components.HardwareNavRack
 import com.example.ui.components.HardwareTransportBar
+import com.example.ui.screens.BoomboxScreen
 import com.example.ui.screens.CassettePlayerScreen
 import com.example.ui.screens.ControlDeckScreen
 import com.example.ui.screens.DiscoveryMachineScreen
 import com.example.ui.screens.DiscmanPlayerScreen
 import com.example.ui.screens.DjDeckScreen
 import com.example.ui.screens.LyricsRoomScreen
+import com.example.ui.screens.MiniDiscPlayerScreen
 import com.example.ui.screens.MixtapeLibraryScreen
 import com.example.ui.screens.MusicDiaryScreen
 import com.example.ui.screens.ObsessionModeScreen
 import com.example.ui.screens.RadioModeScreen
 import com.example.ui.screens.RecordingBoothScreen
 import com.example.ui.screens.SoundLaboratoryScreen
+import com.example.ui.screens.VinylPlayerScreen
+import com.example.ui.screens.FourTrackRecorderScreen
 import com.example.ui.screens.VirtualRoomScreen
 import com.example.ui.screens.WorkshopScreen
 import com.example.ui.theme.MatteBlack
@@ -79,12 +85,17 @@ fun ReplayApp(viewModel: ReplayViewModel) {
     val allObsessions by viewModel.allObsessions.collectAsStateWithLifecycle()
     val allRadioPresets by viewModel.allRadioPresets.collectAsStateWithLifecycle()
     val listeningHistory by viewModel.listeningHistory.collectAsStateWithLifecycle()
+    val allBookmarks by viewModel.allBookmarks.collectAsStateWithLifecycle()
+    val allMiniDiscs by viewModel.allMiniDiscs.collectAsStateWithLifecycle()
+    val currentMiniDisc by viewModel.currentMiniDisc.collectAsStateWithLifecycle()
 
     val djState by viewModel.djState.collectAsStateWithLifecycle()
     val visualizerBands by viewModel.visualizerBands.collectAsStateWithLifecycle()
     val vuMeterLeft by viewModel.vuMeterLeft.collectAsStateWithLifecycle()
     val vuMeterRight by viewModel.vuMeterRight.collectAsStateWithLifecycle()
     val eqState by viewModel.eqState.collectAsStateWithLifecycle()
+    val volumeState by viewModel.volumeState.collectAsStateWithLifecycle()
+    val tapeDegradation by viewModel.tapeDegradation.collectAsStateWithLifecycle()
     val lyricsLines by viewModel.lyricsLines.collectAsStateWithLifecycle()
     val lyricsOffsetMs by viewModel.lyricsOffsetMs.collectAsStateWithLifecycle()
 
@@ -93,8 +104,19 @@ fun ReplayApp(viewModel: ReplayViewModel) {
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
     val recordingDurationMs by viewModel.recordingDurationMs.collectAsStateWithLifecycle()
     val recordingAmplitude by viewModel.recordingAmplitude.collectAsStateWithLifecycle()
+    val vinylState by viewModel.vinylState.collectAsStateWithLifecycle()
+    val fourTrackState by viewModel.fourTrackState.collectAsStateWithLifecycle()
 
     val accentColor = Color(android.graphics.Color.parseColor(skin.accentColorHex))
+
+    // SAF Audio File Picker
+    val audioPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.importAudioFiles(uris)
+        }
+    }
 
     // Hardware Back Button handling for non-Home screens
     BackHandler(enabled = currentScreen != HardwareNavScreen.CONTROL_DECK) {
@@ -159,12 +181,25 @@ fun ReplayApp(viewModel: ReplayViewModel) {
                             tracks = allTracks,
                             favoriteTracks = favoriteTracks,
                             mostPlayedTracks = mostPlayedTracks,
+                            bookmarks = allBookmarks,
+                            volumeState = volumeState,
                             vuMeterLeft = vuMeterLeft,
                             vuMeterRight = vuMeterRight,
                             accentColor = accentColor,
                             onTrackSelect = { viewModel.playTrack(it) },
                             onNavigate = { viewModel.navigateTo(it) },
-                            onFlipCassetteSide = { viewModel.flipCassetteSide() }
+                            onFlipCassetteSide = { viewModel.flipCassetteSide() },
+                            onSetVolume = { viewModel.setAmplification(it) },
+                            onSetPreamp = { viewModel.setPreampGain(it) },
+                            onSetBalance = { viewModel.setBalance(it) },
+                            onToggleMute = { viewModel.toggleMute() },
+                            onSetOutputProfile = { viewModel.setOutputProfile(it) },
+                            onAddBookmark = { viewModel.addBookmarkAtCurrentPosition(it) },
+                            onJumpToBookmark = { viewModel.jumpToBookmark(it) },
+                            onRescanLibrary = { viewModel.refreshLibrary() },
+                            onTriggerFilePicker = { audioPickerLauncher.launch(arrayOf("audio/*")) },
+                            onEjectCassette = { viewModel.ejectCassette() },
+                            onInsertCassette = { viewModel.insertCassette() }
                         )
                     }
                     HardwareNavScreen.CASSETTE -> {
@@ -184,7 +219,9 @@ fun ReplayApp(viewModel: ReplayViewModel) {
                             onTrackSelect = { viewModel.playTrack(it) },
                             onSetShellColor = { viewModel.setTapeShellColor(it) },
                             onSetReelColor = { viewModel.setTapeReelColor(it) },
-                            onAddSticker = { viewModel.addSticker(it) }
+                            onAddSticker = { viewModel.addSticker(it) },
+                            onEjectClick = { viewModel.ejectCassette() },
+                            onInsertClick = { viewModel.insertCassette() }
                         )
                     }
                     HardwareNavScreen.DISCMAN -> {
@@ -237,12 +274,14 @@ fun ReplayApp(viewModel: ReplayViewModel) {
                             onCreateMixtape = { title, label, notes, shell, reel, transp, sA, sB, dur ->
                                 viewModel.createMixtape(title, label, notes, shell, reel, transp, sA, sB, dur)
                             },
-                            onRescanLibrary = { viewModel.refreshLibrary() }
+                            onRescanLibrary = { viewModel.refreshLibrary() },
+                            onTriggerFilePicker = { audioPickerLauncher.launch(arrayOf("audio/*")) }
                         )
                     }
                     HardwareNavScreen.SOUND_LAB -> {
                         SoundLaboratoryScreen(
                             eqState = eqState,
+                            tapeDegradation = tapeDegradation,
                             visualizerBands = visualizerBands,
                             vuMeterLeft = vuMeterLeft,
                             vuMeterRight = vuMeterRight,
@@ -251,7 +290,10 @@ fun ReplayApp(viewModel: ReplayViewModel) {
                             onSetBassBoost = { viewModel.setBassBoost(it) },
                             onSetVirtualizer = { viewModel.setVirtualizer(it) },
                             onToggleEnabled = { viewModel.setEqEnabled(it) },
-                            onApplyPreset = { viewModel.applyEqPreset(it) }
+                            onApplyPreset = { viewModel.applyEqPreset(it) },
+                            onToggleTapeHiss = { viewModel.toggleTapeHiss() },
+                            onToggleWowFlutter = { viewModel.toggleWowFlutter() },
+                            onSetSaturationWarmth = { viewModel.setSaturationWarmth(it) }
                         )
                     }
                     HardwareNavScreen.WORKSHOP -> {
@@ -318,6 +360,58 @@ fun ReplayApp(viewModel: ReplayViewModel) {
                             tracks = allTracks,
                             history = listeningHistory,
                             accentColor = accentColor
+                        )
+                    }
+                    HardwareNavScreen.MINIDISC -> {
+                        MiniDiscPlayerScreen(
+                            currentMiniDisc = currentMiniDisc,
+                            allMiniDiscs = allMiniDiscs,
+                            allTracks = allTracks,
+                            playbackState = playbackState,
+                            accentColor = accentColor,
+                            onTrackSelect = { viewModel.playTrack(it) },
+                            onLoadMiniDisc = { viewModel.loadMiniDisc(it) },
+                            onEjectMiniDisc = { viewModel.ejectMiniDisc() },
+                            onSaveMiniDisc = { title, label, col, atrac, ids ->
+                                viewModel.saveMiniDisc(title, label, col, atrac, ids)
+                            }
+                        )
+                    }
+                    HardwareNavScreen.BOOMBOX -> {
+                        BoomboxScreen(
+                            playbackState = playbackState,
+                            volumeState = volumeState,
+                            vuMeterLeft = vuMeterLeft,
+                            vuMeterRight = vuMeterRight,
+                            accentColor = accentColor,
+                            onSetVolume = { viewModel.setAmplification(it) },
+                            onTogglePlayPause = { viewModel.togglePlayPause() }
+                        )
+                    }
+                    HardwareNavScreen.VINYL -> {
+                        VinylPlayerScreen(
+                            playbackState = playbackState,
+                            vinylState = vinylState,
+                            allTracks = allTracks,
+                            accentColor = accentColor,
+                            onSetRpm = { viewModel.setVinylRpm(it) },
+                            onSetPitch = { viewModel.setVinylPitch(it) },
+                            onCueTonearm = { viewModel.cueTonearm(it) },
+                            onScratchVinyl = { viewModel.scratchVinyl(it) },
+                            onTrackSelect = { viewModel.playTrack(it) }
+                        )
+                    }
+                    HardwareNavScreen.FOUR_TRACK -> {
+                        FourTrackRecorderScreen(
+                            playbackState = playbackState,
+                            fourTrackState = fourTrackState,
+                            accentColor = accentColor,
+                            onSetSpeed = { viewModel.setFourTrackSpeed(it) },
+                            onSetPitch = { viewModel.setFourTrackPitch(it) },
+                            onSetMasterFader = { viewModel.setFourTrackMasterFader(it) },
+                            onSetChannelFader = { ch, lvl -> viewModel.setFourTrackChannelFader(ch, lvl) },
+                            onToggleRecArm = { viewModel.toggleFourTrackRecArm(it) },
+                            onToggleDbx = { viewModel.toggleFourTrackDbx() }
                         )
                     }
                 }

@@ -1,35 +1,40 @@
 package com.example.ui
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ReplayApplication
 import com.example.data.ListeningHistoryEntity
+import com.example.data.MiniDiscEntity
 import com.example.data.MixtapeEntity
 import com.example.data.ObsessionProfileEntity
 import com.example.data.RadioPresetEntity
 import com.example.data.RecordingEntity
+import com.example.data.TrackBookmarkEntity
 import com.example.model.EqualizerState
 import com.example.model.HardwareMaterial
 import com.example.model.HardwareNavScreen
 import com.example.model.HardwareSkin
 import com.example.model.LyricsLine
+import com.example.model.MasterVolumeState
+import com.example.model.MiniDiscCartridge
+import com.example.model.OutputProfile
 import com.example.model.PlaybackState
 import com.example.model.StickerItem
+import com.example.model.TapeDegradationState
 import com.example.model.TapeSide
 import com.example.model.Track
 import com.example.playback.LrcParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlin.math.abs
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.io.File
+import kotlin.math.abs
 import kotlin.random.Random
 
 class ReplayViewModel(application: Application) : AndroidViewModel(application) {
@@ -72,10 +77,14 @@ class ReplayViewModel(application: Application) : AndroidViewModel(application) 
     private val _tapeStickers = MutableStateFlow<List<StickerItem>>(
         listOf(
             StickerItem("stk_1", "90s UNDERGROUND", 0.65f, 0.20f, -5f, 1.0f),
-            StickerItem("stk_2", "ACID", 0.15f, 0.72f, 8f, 0.9f)
+            StickerItem("stk_2", "CHROME TAPE", 0.15f, 0.72f, 8f, 0.9f)
         )
     )
     val tapeStickers: StateFlow<List<StickerItem>> = _tapeStickers.asStateFlow()
+
+    // MiniDisc Player State
+    private val _currentMiniDisc = MutableStateFlow<MiniDiscCartridge?>(null)
+    val currentMiniDisc: StateFlow<MiniDiscCartridge?> = _currentMiniDisc.asStateFlow()
 
     // Discman Jewel Case Modal
     private val _showJewelCase = MutableStateFlow(false)
@@ -105,6 +114,12 @@ class ReplayViewModel(application: Application) : AndroidViewModel(application) 
     val allMixtapes: StateFlow<List<MixtapeEntity>> = repository.allMixtapes
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allMiniDiscs: StateFlow<List<MiniDiscEntity>> = repository.allMiniDiscs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allBookmarks: StateFlow<List<TrackBookmarkEntity>> = repository.allBookmarks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val allRecordings: StateFlow<List<RecordingEntity>> = repository.allRecordings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -124,9 +139,13 @@ class ReplayViewModel(application: Application) : AndroidViewModel(application) 
     val vuMeterLeft = audioEngine.effectsManager.vuMeterLeft
     val vuMeterRight = audioEngine.effectsManager.vuMeterRight
     val eqState = audioEngine.effectsManager.eqState
+    val volumeState: StateFlow<MasterVolumeState> = audioEngine.effectsManager.volumeState
+    val tapeDegradation: StateFlow<TapeDegradationState> = audioEngine.effectsManager.tapeDegradation
     val isRecording = audioEngine.isRecording
     val recordingDurationMs = audioEngine.recordingDurationMs
     val recordingAmplitude = audioEngine.recordingAmplitude
+    val vinylState = audioEngine.vinylState
+    val fourTrackState = audioEngine.fourTrackState
 
     init {
         // Observe track changes to auto-parse lyrics
@@ -188,6 +207,133 @@ class ReplayViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    // Complete Volume System (0% to 300% & 500% experimental ceiling)
+    fun setAmplification(percent: Int) {
+        audioEngine.effectsManager.setAmplificationPercent(percent)
+        if (percent > 140) {
+            showHud("BOOST: $percent% (PREAMP ACTIVE)")
+        }
+    }
+
+    fun setPreampGain(gainDb: Float) {
+        audioEngine.effectsManager.setPreampGain(gainDb)
+    }
+
+    fun setBalance(pan: Float) {
+        audioEngine.effectsManager.setBalance(pan)
+    }
+
+    fun toggleMute() {
+        audioEngine.effectsManager.toggleMute()
+        showHud(if (volumeState.value.isMuted) "MUTED [MUTE ACTIVE]" else "AUDIO RESTORED")
+    }
+
+    fun setOutputProfile(profile: OutputProfile) {
+        audioEngine.effectsManager.setOutputProfile(profile)
+        showHud("OUTPUT: ${profile.label}")
+    }
+
+    fun toggleExperimentalCeiling() {
+        audioEngine.effectsManager.toggleExperimentalCeiling()
+        val enabled = audioEngine.effectsManager.volumeState.value.allowExperimentalCeiling
+        showHud(if (enabled) "EXPERIMENTAL 500% BOOST UNLOCKED" else "300% CEILING RESTORED")
+    }
+
+    // Tape Degradation Simulator
+    fun toggleTapeHiss() {
+        audioEngine.effectsManager.toggleTapeHiss()
+        showHud(if (tapeDegradation.value.tapeHissEnabled) "TAPE HISS ON" else "TAPE HISS OFF")
+    }
+
+    fun toggleWowFlutter() {
+        audioEngine.effectsManager.toggleWowFlutter()
+        showHud(if (tapeDegradation.value.wowFlutterEnabled) "WOW & FLUTTER ON" else "WOW & FLUTTER OFF")
+    }
+
+    fun setSaturationWarmth(warmth: Float) {
+        audioEngine.effectsManager.setSaturationWarmth(warmth)
+    }
+
+    // Audio Time Machine (Bookmarks)
+    fun addBookmarkAtCurrentPosition(label: String) {
+        val curTrack = playbackState.value.currentTrack ?: return
+        val pos = playbackState.value.positionMs
+        viewModelScope.launch {
+            repository.saveBookmark(
+                trackId = curTrack.id,
+                timestampMs = pos,
+                label = label.ifBlank { "MOMENT @ ${pos / 1000}s" }
+            )
+            showHud("TIME MACHINE BOOKMARK SAVED")
+        }
+    }
+
+    fun jumpToBookmark(timestampMs: Long) {
+        seekTo(timestampMs)
+        showHud("JUMPED TO ${timestampMs / 1000}s")
+    }
+
+    fun deleteBookmark(id: Long) {
+        viewModelScope.launch {
+            repository.deleteBookmark(id)
+            showHud("BOOKMARK REMOVED")
+        }
+    }
+
+    // MiniDisc Player Operations
+    fun saveMiniDisc(title: String, label: String, colorHex: String, atracMode: String, trackIds: List<Long>) {
+        viewModelScope.launch {
+            repository.saveMiniDisc(title, label, colorHex, atracMode, trackIds)
+            showHud("MINIDISC MASTERED: $title")
+        }
+    }
+
+    fun loadMiniDisc(disc: MiniDiscEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val all = allTracks.value.associateBy { it.id }
+            val ids = disc.trackIds.split(",").mapNotNull { it.trim().toLongOrNull() }
+            val tracks = ids.mapNotNull { all[it] }
+
+            _currentMiniDisc.value = MiniDiscCartridge(
+                id = disc.id,
+                discTitle = disc.discTitle,
+                labelText = disc.labelText,
+                colorHex = disc.colorHex,
+                atracMode = disc.atracMode,
+                tracks = tracks,
+                isShutterOpen = true
+            )
+
+            if (tracks.isNotEmpty()) {
+                playTrack(tracks[0], tracks)
+            }
+            navigateTo(HardwareNavScreen.MINIDISC)
+            showHud("LOADED MD: ${disc.discTitle}")
+        }
+    }
+
+    fun ejectMiniDisc() {
+        _currentMiniDisc.value = null
+        audioEngine.stop()
+        showHud("MINIDISC EJECTED")
+    }
+
+    // Real Audio File Importing (via SAF)
+    fun importAudioFiles(uris: List<Uri>) {
+        viewModelScope.launch {
+            var importedCount = 0
+            for (uri in uris) {
+                val track = repository.importAudioUri(uri)
+                if (track != null) importedCount++
+            }
+            if (importedCount > 0) {
+                showHud("IMPORTED $importedCount AUDIO FILE(S)")
+            } else {
+                showHud("NO VALID AUDIO EXTRACTED")
+            }
+        }
+    }
+
     // Cassette Controls
     fun flipCassetteSide() {
         val newSide = audioEngine.flipCassetteSide()
@@ -195,8 +341,62 @@ class ReplayViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun ejectCassette() {
-        audioEngine.stop()
-        showHud("CASSETTE EJECTED")
+        audioEngine.ejectCassette()
+        showHud("CASSETTE EJECTED [DOOR OPEN]")
+    }
+
+    fun insertCassette() {
+        audioEngine.insertCassette()
+        showHud("CASSETTE INSERTED [DOOR CLOSED]")
+    }
+
+    // Vinyl Turntable
+    fun setVinylRpm(rpm: Int) {
+        audioEngine.setVinylRpm(rpm)
+        showHud("TURNTABLE SPEED: $rpm RPM")
+    }
+
+    fun setVinylPitch(pitchPercent: Float) {
+        audioEngine.setVinylPitch(pitchPercent)
+        showHud(String.format("PITCH: %+.1f%%", pitchPercent))
+    }
+
+    fun cueTonearm(cued: Boolean) {
+        audioEngine.cueTonearm(cued)
+        showHud(if (cued) "TONEARM DROPPED [NEEDLE ON GROOVE]" else "TONEARM CUED UP")
+    }
+
+    fun scratchVinyl(deltaDeg: Float) {
+        audioEngine.scratchVinyl(deltaDeg)
+    }
+
+    // Four-Track Portastudio
+    fun setFourTrackSpeed(isHigh: Boolean) {
+        audioEngine.setFourTrackSpeed(isHigh)
+        showHud(if (isHigh) "TAPE SPEED: 9.5 CM/S (HIGH FIDELITY)" else "TAPE SPEED: 4.75 CM/S (STANDARD)")
+    }
+
+    fun setFourTrackPitch(pitchPercent: Float) {
+        audioEngine.setFourTrackPitch(pitchPercent)
+        showHud(String.format("PORTA PITCH: %+.1f%%", pitchPercent))
+    }
+
+    fun setFourTrackMasterFader(fader: Float) {
+        audioEngine.setFourTrackMasterFader(fader)
+    }
+
+    fun setFourTrackChannelFader(channelNum: Int, level: Float) {
+        audioEngine.setFourTrackChannelFader(channelNum, level)
+    }
+
+    fun toggleFourTrackRecArm(channelNum: Int) {
+        audioEngine.toggleFourTrackRecArm(channelNum)
+        showHud("CH $channelNum REC ARM TOGGLED")
+    }
+
+    fun toggleFourTrackDbx() {
+        audioEngine.toggleFourTrackDbx()
+        showHud(if (fourTrackState.value.isDbxNoiseReductionOn) "DBX NOISE REDUCTION ON" else "DBX BYPASSED")
     }
 
     fun setTapeShellColor(hex: String) {
@@ -367,14 +567,12 @@ class ReplayViewModel(application: Application) : AndroidViewModel(application) 
         val clamped = (Math.round(freqMhz * 10f) / 10f).coerceIn(88.0f, 108.0f)
         _radioFreqMhz.value = clamped
 
-        // Check if close to any preset
         val presets = allRadioPresets.value
         val matched = presets.firstOrNull { abs(it.freqMhz - clamped) < 0.25f }
 
         if (matched != null) {
             _isRadioTuned.value = true
             showHud("SIGNAL LOCKED: ${matched.name}")
-            // If local shuffle station and not currently playing, start shuffle
             if (matched.isLocalShuffle && allTracks.value.isNotEmpty()) {
                 val randTrack = allTracks.value.random()
                 playTrack(randTrack, allTracks.value.shuffled())
@@ -406,8 +604,8 @@ class ReplayViewModel(application: Application) : AndroidViewModel(application) 
     // Library Rescan
     fun refreshLibrary() {
         viewModelScope.launch {
-            repository.scanDeviceMusic()
-            showHud("LIBRARY RESCANNED")
+            val count = repository.scanDeviceMusic()
+            showHud(if (count > 0) "FOUND $count AUDIO TRACK(S)" else "SCAN COMPLETED (0 TRACKS)")
         }
     }
 

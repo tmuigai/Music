@@ -28,6 +28,9 @@ interface ReplayDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTracks(tracks: List<TrackEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTrack(track: TrackEntity)
+
     @Update
     suspend fun updateTrack(track: TrackEntity)
 
@@ -39,6 +42,9 @@ interface ReplayDao {
 
     @Query("UPDATE tracks SET customLyrics = :lyrics WHERE id = :trackId")
     suspend fun updateLyrics(trackId: Long, lyrics: String)
+
+    @Query("DELETE FROM tracks WHERE id >= 9901 AND id <= 9905")
+    suspend fun purgeSyntheticTestTracks()
 
     // Mixtapes
     @Query("SELECT * FROM mixtapes ORDER BY createdMs DESC")
@@ -52,6 +58,29 @@ interface ReplayDao {
 
     @Query("DELETE FROM mixtapes WHERE id = :id")
     suspend fun deleteMixtape(id: Long)
+
+    // MiniDiscs
+    @Query("SELECT * FROM minidiscs ORDER BY createdMs DESC")
+    fun getAllMiniDiscs(): Flow<List<MiniDiscEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMiniDisc(disc: MiniDiscEntity): Long
+
+    @Query("DELETE FROM minidiscs WHERE id = :id")
+    suspend fun deleteMiniDisc(id: Long)
+
+    // Track Bookmarks (Audio Time Machine)
+    @Query("SELECT * FROM track_bookmarks WHERE trackId = :trackId ORDER BY timestampMs ASC")
+    fun getBookmarksForTrack(trackId: Long): Flow<List<TrackBookmarkEntity>>
+
+    @Query("SELECT * FROM track_bookmarks ORDER BY createdMs DESC")
+    fun getAllBookmarks(): Flow<List<TrackBookmarkEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBookmark(bookmark: TrackBookmarkEntity): Long
+
+    @Query("DELETE FROM track_bookmarks WHERE id = :id")
+    suspend fun deleteBookmark(id: Long)
 
     // Listening History
     @Insert

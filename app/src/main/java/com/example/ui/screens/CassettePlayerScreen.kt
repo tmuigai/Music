@@ -78,6 +78,8 @@ fun CassettePlayerScreen(
     onSetShellColor: (String) -> Unit,
     onSetReelColor: (String) -> Unit,
     onAddSticker: (String) -> Unit,
+    onEjectClick: () -> Unit = {},
+    onInsertClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
@@ -137,12 +139,15 @@ fun CassettePlayerScreen(
                     isPlaying = playbackState.isPlaying,
                     progress = playbackState.tapeReelProgress,
                     tapeCounter = playbackState.tapeCounter,
+                    isInserted = playbackState.isCassetteInserted,
                     shellColorHex = shellColorHex,
                     reelColorHex = reelColorHex,
                     isTransparent = true,
                     stickers = stickers,
                     onSeekDrag = onSeekDrag,
-                    onFlipSide = onFlipSide
+                    onFlipSide = onFlipSide,
+                    onEjectClick = onEjectClick,
+                    onInsertClick = onInsertClick
                 )
             }
         }

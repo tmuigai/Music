@@ -500,26 +500,30 @@ fun InteractiveCassetteDeck(
     artist: String,
     currentSide: TapeSide,
     isPlaying: Boolean,
-    progress: Float, // 0.0f (all tape on left) to 1.0f (all tape on right)
+    progress: Float, // 0.0f to 1.0f
     tapeCounter: Int,
+    isInserted: Boolean = true,
     shellColorHex: String = "#16191C",
     reelColorHex: String = "#00FF66",
     isTransparent: Boolean = true,
     stickers: List<StickerItem> = emptyList(),
     onSeekDrag: (Float) -> Unit = {},
     onFlipSide: () -> Unit = {},
+    onEjectClick: () -> Unit = {},
+    onInsertClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
     val shellColor = remember(shellColorHex) { Color(android.graphics.Color.parseColor(shellColorHex)) }
     val reelColor = remember(reelColorHex) { Color(android.graphics.Color.parseColor(reelColorHex)) }
 
-    // Reel rotation angle driven by progress and playback
-    val leftReelRadiusFactor = 1.0f - (progress * 0.70f)
-    val rightReelRadiusFactor = 0.30f + (progress * 0.70f)
+    // Reel physics: Side A moves tape from Left to Right; Side B moves tape from Right to Left!
+    val effProgress = if (currentSide == TapeSide.SIDE_A) progress else (1.0f - progress)
+    val leftReelRadiusFactor = 1.0f - (effProgress * 0.70f)
+    val rightReelRadiusFactor = 0.30f + (effProgress * 0.70f)
 
     var reelRotationAngle by remember { mutableFloatStateOf(0f) }
-    if (isPlaying) {
+    if (isPlaying && isInserted) {
         val transition = rememberInfiniteTransition(label = "tape_spin")
         val spinAngle by transition.animateFloat(
             initialValue = 0f,
@@ -533,77 +537,214 @@ fun InteractiveCassetteDeck(
         reelRotationAngle = spinAngle
     }
 
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(230.dp)
-            .shadow(6.dp, RoundedCornerShape(8.dp))
-            .clip(RoundedCornerShape(8.dp))
-            .background(shellColor)
-            .border(2.dp, BorderHardware, RoundedCornerShape(8.dp))
-            .padding(8.dp)
-    ) {
-        val w = maxWidth
-        val h = maxHeight
-
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Upper Cassette Label / Spine
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(42.dp)
-                    .background(GunmetalMedium)
-                    .border(1.dp, BorderHardware, RoundedCornerShape(3.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
+    if (!isInserted) {
+        // Ejected Cassette Well / Open Door Compartment
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(230.dp)
+                .shadow(6.dp, RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(8.dp))
+                .background(GunmetalDark)
+                .border(2.dp, BorderHardware, RoundedCornerShape(8.dp))
+                .clickable {
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    onInsertClick()
+                }
+                .padding(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Mechanical Open Well Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = title.ifBlank { "TAPE-99 MASTER" },
-                            fontFamily = ChakraPetchFont,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = artist.ifBlank { "UNDERGROUND SOUNDSYSTEM" },
-                            fontFamily = ShareTechMonoFont,
-                            fontSize = 10.sp,
-                            color = TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    // Side Indicator & Flip Button
+                    Text(
+                        text = "CASSETTE COMPARTMENT // DOOR OPEN",
+                        fontFamily = ChakraPetchFont,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = BurntOrange
+                    )
                     Box(
                         modifier = Modifier
                             .background(MatteBlack)
-                            .border(1.dp, AcidGreen, RoundedCornerShape(3.dp))
-                            .clickable {
-                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                                onFlipSide()
-                            }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .border(1.dp, BurntOrange, RoundedCornerShape(2.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = if (currentSide == TapeSide.SIDE_A) "SIDE A [FLIP]" else "SIDE B [FLIP]",
-                            fontFamily = ChakraPetchFont,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
-                            color = AcidGreen
+                            text = "TRAY EJECTED",
+                            fontFamily = ShareTechMonoFont,
+                            fontSize = 9.sp,
+                            color = BurntOrange
                         )
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Tape Head Block & Dual Drive Spindles Schematic
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp)
+                        .background(MatteBlack)
+                        .border(1.dp, BorderHardware, RoundedCornerShape(4.dp))
+                ) {
+                    val cw = size.width
+                    val ch = size.height
+                    val leftSpindle = Offset(cw * 0.28f, ch * 0.45f)
+                    val rightSpindle = Offset(cw * 0.72f, ch * 0.45f)
+
+                    // Spindle gears
+                    drawCircle(color = GunmetalLight, radius = 22f, center = leftSpindle)
+                    drawCircle(color = GunmetalLight, radius = 22f, center = rightSpindle)
+                    drawCircle(color = BurntOrange, radius = 8f, center = leftSpindle)
+                    drawCircle(color = BurntOrange, radius = 8f, center = rightSpindle)
+
+                    // Center tape head block
+                    val headCenter = Offset(cw * 0.5f, ch * 0.78f)
+                    drawRoundRect(
+                        color = GunmetalLight,
+                        topLeft = Offset(headCenter.x - 40f, headCenter.y - 14f),
+                        size = Size(80f, 26f),
+                        cornerRadius = CornerRadius(4f, 4f)
+                    )
+                    // Mu-metal audio read head
+                    drawRect(
+                        color = LightAluminium,
+                        topLeft = Offset(headCenter.x - 14f, headCenter.y - 12f),
+                        size = Size(28f, 18f)
+                    )
+                    // Capstan pinch rollers
+                    drawCircle(color = MatteBlack, radius = 10f, center = Offset(cw * 0.20f, ch * 0.78f))
+                    drawCircle(color = MatteBlack, radius = 10f, center = Offset(cw * 0.80f, ch * 0.78f))
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Insert Cassette Button
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(AcidGreen)
+                        .clickable {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            onInsertClick()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "INSERT CASSETTE TAPE [CLICK DOOR]",
+                        fontFamily = ChakraPetchFont,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = MatteBlack
+                    )
+                }
+            }
+        }
+    } else {
+        BoxWithConstraints(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(230.dp)
+                .shadow(6.dp, RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(8.dp))
+                .background(shellColor)
+                .border(2.dp, BorderHardware, RoundedCornerShape(8.dp))
+                .padding(8.dp)
+        ) {
+            val w = maxWidth
+            val h = maxHeight
+
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Upper Cassette Label / Spine
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .background(GunmetalMedium)
+                        .border(1.dp, BorderHardware, RoundedCornerShape(3.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = title.ifBlank { "TAPE-99 MASTER" },
+                                fontFamily = ChakraPetchFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = artist.ifBlank { "UNDERGROUND SOUNDSYSTEM" },
+                                fontFamily = ShareTechMonoFont,
+                                fontSize = 10.sp,
+                                color = TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        // Side Indicator, Flip Button & Eject Button
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .background(MatteBlack)
+                                    .border(1.dp, AcidGreen, RoundedCornerShape(3.dp))
+                                    .clickable {
+                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        onFlipSide()
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = if (currentSide == TapeSide.SIDE_A) "SIDE A [FLIP]" else "SIDE B [FLIP]",
+                                    fontFamily = ChakraPetchFont,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 9.sp,
+                                    color = AcidGreen
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .background(GunmetalDark)
+                                    .border(1.dp, DangerRed, RoundedCornerShape(3.dp))
+                                    .clickable {
+                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        onEjectClick()
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = "EJECT",
+                                    fontFamily = ChakraPetchFont,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 9.sp,
+                                    color = DangerRed
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
             // Transparent Center Tape Window with Spools
             Box(
@@ -725,6 +866,7 @@ fun InteractiveCassetteDeck(
             }
         }
     }
+}
 }
 
 @Composable
@@ -916,3 +1058,131 @@ fun DiscmanGraphic(
         }
     }
 }
+
+@Composable
+fun BayQuickButton(
+    title: String,
+    code: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val view = LocalView.current
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(3.dp))
+            .background(GunmetalDark)
+            .border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(3.dp))
+            .clickable {
+                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onClick()
+            }
+            .padding(horizontal = 8.dp, vertical = 8.dp)
+    ) {
+        Column {
+            Text(
+                text = code,
+                fontFamily = ShareTechMonoFont,
+                fontSize = 8.sp,
+                color = color
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = title,
+                fontFamily = ChakraPetchFont,
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+fun LibraryTrackRow(
+    index: Int,
+    track: com.example.model.Track,
+    isCurrent: Boolean,
+    isPlaying: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val view = LocalView.current
+    val min = (track.durationMs / 1000) / 60
+    val sec = (track.durationMs / 1000) % 60
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(2.dp))
+            .background(if (isCurrent) GunmetalLight else GunmetalDark)
+            .border(
+                1.dp,
+                if (isCurrent) accentColor else BorderHardware,
+                RoundedCornerShape(2.dp)
+            )
+            .clickable {
+                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onClick()
+            }
+            .padding(horizontal = 10.dp, vertical = 7.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = String.format("%02d", index),
+                    fontFamily = ShareTechMonoFont,
+                    fontSize = 11.sp,
+                    color = if (isCurrent) accentColor else TextMuted
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                if (isPlaying) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(AcidGreen)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Column {
+                    Text(
+                        text = track.title,
+                        fontFamily = ChakraPetchFont,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 12.sp,
+                        color = if (isCurrent) accentColor else TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${track.artist} // ${track.album}",
+                        fontFamily = ShareTechMonoFont,
+                        fontSize = 10.sp,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Text(
+                text = String.format("%02d:%02d", min, sec),
+                fontFamily = ShareTechMonoFont,
+                fontSize = 10.sp,
+                color = if (isCurrent) accentColor else TextMuted
+            )
+        }
+    }
+}
+

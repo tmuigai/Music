@@ -2,15 +2,13 @@ package com.example.data
 
 import android.content.ContentUris
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.MediaStore
 import android.util.Log
-import com.example.model.CassetteTape
-import com.example.model.TapeSide
 import com.example.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -39,54 +37,38 @@ class ReplayRepository(
     }
 
     val allMixtapes: Flow<List<MixtapeEntity>> = dao.getAllMixtapes()
+    val allMiniDiscs: Flow<List<MiniDiscEntity>> = dao.getAllMiniDiscs()
+    val allBookmarks: Flow<List<TrackBookmarkEntity>> = dao.getAllBookmarks()
     val allRecordings: Flow<List<RecordingEntity>> = dao.getAllRecordings()
     val allObsessions: Flow<List<ObsessionProfileEntity>> = dao.getAllObsessions()
     val allRadioPresets: Flow<List<RadioPresetEntity>> = dao.getAllRadioPresets()
     val recentHistory: Flow<List<ListeningHistoryEntity>> = dao.getRecentHistory()
 
+    fun getBookmarksForTrack(trackId: Long): Flow<List<TrackBookmarkEntity>> =
+        dao.getBookmarksForTrack(trackId)
+
     suspend fun initializeLibrary() = withContext(Dispatchers.IO) {
-        // 1. Check if tracks already exist
-        val existingTracks = dao.getAllTracks().first()
-        if (existingTracks.isEmpty()) {
-            Log.d(TAG, "No existing tracks in database. Seeding 90s underground tracks...")
-            val seeded = AudioSeeder.seedTracksIfNecessary(context)
-            dao.insertTracks(seeded)
+        // Purge any synthetic test tracks (IDs 9901..9905) to ensure pure real user data
+        dao.purgeSyntheticTestTracks()
 
-            // Seed default Mixtape
-            val trackIds = seeded.map { it.id.toString() }
-            val sideA = trackIds.take(3).joinToString(",")
-            val sideB = trackIds.drop(3).joinToString(",")
-            dao.insertMixtape(
-                MixtapeEntity(
-                    title = "MIXTAPE 99: ACID & BREAKS",
-                    labelText = "C-60 / CHROME HIGH BIAS",
-                    notes = "Underground warehouse party masters recorded on dual cassette deck.",
-                    shellColorHex = "#16191C",
-                    reelColorHex = "#00FF66",
-                    isTransparent = true,
-                    sideATrackIds = sideA,
-                    sideBTrackIds = sideB,
-                    durationMinutes = 60
-                )
+        // Seed pure local radio stations if empty
+        val presets = dao.getAllRadioPresets()
+        dao.insertRadioPresets(
+            listOf(
+                RadioPresetEntity(name = "LOCAL VAULT SHUFFLE", freqMhz = 99.1f, isLocalShuffle = true, genre = "Device Audio"),
+                RadioPresetEntity(name = "HEAVY ROTATION AIR", freqMhz = 88.5f, isLocalShuffle = true, genre = "Most Played"),
+                RadioPresetEntity(name = "UNDERGROUND DUB FM", freqMhz = 104.3f, isLocalShuffle = true, genre = "Unplayed Gems"),
+                RadioPresetEntity(name = "CASSETTE MASTER STATION", freqMhz = 92.7f, isLocalShuffle = true, genre = "Mixtape Shuffle"),
+                RadioPresetEntity(name = "MINIDISC OPTICAL STREAM", freqMhz = 107.9f, isLocalShuffle = true, genre = "Favorites")
             )
+        )
 
-            // Seed Radio Presets
-            dao.insertRadioPresets(
-                listOf(
-                    RadioPresetEntity(name = "99.1 REPLAY FM (NYC)", freqMhz = 99.1f, isLocalShuffle = true, genre = "Breakbeat & Jungle"),
-                    RadioPresetEntity(name = "88.5 PIRATE DUB (LDN)", freqMhz = 88.5f, isLocalShuffle = true, genre = "Dub & Reggae"),
-                    RadioPresetEntity(name = "104.3 ACID MATRIX (BER)", freqMhz = 104.3f, isLocalShuffle = true, genre = "Acid Techno"),
-                    RadioPresetEntity(name = "92.7 BOOM BAP VAULT", freqMhz = 92.7f, isLocalShuffle = true, genre = "Golden Era Hip-Hop"),
-                    RadioPresetEntity(name = "107.9 CYBER DISCMAN", freqMhz = 107.9f, isLocalShuffle = true, genre = "Eurodance / Trance")
-                )
-            )
-        }
-
-        // 2. Perform MediaStore Scan
+        // Perform real MediaStore Scan
         scanDeviceMusic()
     }
 
-    suspend fun scanDeviceMusic() = withContext(Dispatchers.IO) {
+    suspend fun scanDeviceMusic(): Int = withContext(Dispatchers.IO) {
+        var count = 0
         try {
             val projection = arrayOf(
                 MediaStore.Audio.Media._ID,
@@ -99,7 +81,7 @@ class ReplayRepository(
                 MediaStore.Audio.Media.YEAR
             )
 
-            val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= 15000"
+            val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= 5000"
             val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 
             context.contentResolver.query(
@@ -127,7 +109,7 @@ class ReplayRepository(
                     val album = cursor.getString(albumCol) ?: "Unknown Album"
                     val duration = cursor.getLong(durationCol)
                     val path = if (dataCol >= 0) cursor.getString(dataCol) ?: "" else ""
-                    val year = if (yearCol >= 0) cursor.getInt(yearCol) else 1999
+                    val year = if (yearCol >= 0) cursor.getInt(yearCol) else 0
                     val albumId = if (albumIdCol >= 0) cursor.getLong(albumIdCol) else -1L
 
                     val artUri = if (albumId != -1L) {
@@ -153,20 +135,65 @@ class ReplayRepository(
                             albumArtUri = artUri,
                             path = path,
                             genre = "Local Audio",
-                            year = if (year > 0) year else 1999
+                            year = year
                         )
                     )
                 }
 
                 if (scannedTracks.isNotEmpty()) {
                     dao.insertTracks(scannedTracks)
-                    Log.d(TAG, "Scanned and saved ${scannedTracks.size} user tracks from device.")
+                    count = scannedTracks.size
+                    Log.d(TAG, "Scanned $count real audio tracks from MediaStore.")
                 }
             }
         } catch (e: SecurityException) {
-            Log.w(TAG, "Audio permission not yet granted for device MediaStore scan: ${e.message}")
+            Log.w(TAG, "Audio permission not yet granted: ${e.message}")
         } catch (e: Exception) {
             Log.e(TAG, "Error querying MediaStore", e)
+        }
+        count
+    }
+
+    // Import real audio files directly chosen by user via SAF OpenDocument picker
+    suspend fun importAudioUri(uri: Uri): Track? = withContext(Dispatchers.IO) {
+        try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(context, uri)
+
+            val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+                ?: uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
+                ?: "Imported Track"
+            val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: "Unknown Artist"
+            val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: "Imported Album"
+            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val durationMs = durationStr?.toLongOrNull() ?: 180000L
+            val genre = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE) ?: "Audio File"
+            val yearStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
+            val year = yearStr?.toIntOrNull() ?: 0
+
+            retriever.release()
+
+            val trackId = System.currentTimeMillis()
+            val entity = TrackEntity(
+                id = trackId,
+                title = title,
+                artist = artist,
+                album = album,
+                durationMs = durationMs,
+                contentUri = uri.toString(),
+                albumArtUri = null,
+                path = uri.path ?: "",
+                genre = genre,
+                year = year,
+                dateAdded = System.currentTimeMillis()
+            )
+
+            dao.insertTrack(entity)
+            Log.d(TAG, "Successfully imported real user track: $title")
+            entity.toDomain()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to import real audio file: $uri", e)
+            null
         }
     }
 
@@ -221,6 +248,38 @@ class ReplayRepository(
 
     suspend fun deleteMixtape(id: Long) = withContext(Dispatchers.IO) {
         dao.deleteMixtape(id)
+    }
+
+    suspend fun saveMiniDisc(discTitle: String, labelText: String, colorHex: String, atracMode: String, trackIds: List<Long>): Long =
+        withContext(Dispatchers.IO) {
+            dao.insertMiniDisc(
+                MiniDiscEntity(
+                    discTitle = discTitle,
+                    labelText = labelText,
+                    colorHex = colorHex,
+                    atracMode = atracMode,
+                    trackIds = trackIds.joinToString(",")
+                )
+            )
+        }
+
+    suspend fun deleteMiniDisc(id: Long) = withContext(Dispatchers.IO) {
+        dao.deleteMiniDisc(id)
+    }
+
+    suspend fun saveBookmark(trackId: Long, timestampMs: Long, label: String): Long =
+        withContext(Dispatchers.IO) {
+            dao.insertBookmark(
+                TrackBookmarkEntity(
+                    trackId = trackId,
+                    timestampMs = timestampMs,
+                    label = label
+                )
+            )
+        }
+
+    suspend fun deleteBookmark(id: Long) = withContext(Dispatchers.IO) {
+        dao.deleteBookmark(id)
     }
 
     suspend fun saveRecording(title: String, filePath: String, durationMs: Long, voiceoverTrackTitle: String): Long =

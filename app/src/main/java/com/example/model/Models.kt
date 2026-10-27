@@ -14,7 +14,11 @@ enum class HardwareNavScreen(val title: String, val code: String) {
     RADIO_MODE("FM TUNER", "11"),
     DISCOVERY_MACHINE("DISCOVERY", "12"),
     OBSESSION_MODE("OBSESSION", "13"),
-    MUSIC_DIARY("STATISTICS & DIARY", "14")
+    MUSIC_DIARY("STATISTICS & DIARY", "14"),
+    MINIDISC("MINIDISC DECK", "15"),
+    BOOMBOX("GHETTOBLASTER", "16"),
+    VINYL("TURNTABLE DECK", "17"),
+    FOUR_TRACK("PORTASTUDIO 4-TRK", "18")
 }
 
 data class Track(
@@ -26,8 +30,8 @@ data class Track(
     val contentUri: String,
     val albumArtUri: String? = null,
     val path: String = "",
-    val genre: String = "Underground",
-    val year: Int = 1999,
+    val genre: String = "Local Audio",
+    val year: Int = 0,
     val dateAdded: Long = System.currentTimeMillis(),
     val replayCount: Int = 0,
     val lastPlayedMs: Long = 0,
@@ -38,6 +42,48 @@ data class Track(
 enum class RepeatMode {
     OFF, ALL, ONE
 }
+
+enum class OutputProfile(val label: String) {
+    HEADPHONES("HEADPHONES // PRO"),
+    SPEAKER("BUILT-IN SPEAKER"),
+    LINE_OUT("LINE OUT // STEREO")
+}
+
+data class MasterVolumeState(
+    val amplificationPercent: Int = 100, // 0 to 300%, or up to 500%
+    val preampGainDb: Float = 0.0f, // -12dB to +18dB
+    val balancePan: Float = 0.0f, // -1.0 (Left) to +1.0 (Right)
+    val isMuted: Boolean = false,
+    val isClipping: Boolean = false,
+    val limiterEnabled: Boolean = true,
+    val outputProfile: OutputProfile = OutputProfile.HEADPHONES,
+    val allowExperimentalCeiling: Boolean = false // 500% ceiling
+)
+
+data class TapeDegradationState(
+    val tapeHissEnabled: Boolean = false,
+    val tapeHissVolume: Float = 0.20f,
+    val wowFlutterEnabled: Boolean = false,
+    val wowFlutterDepth: Float = 0.35f,
+    val saturationWarmth: Float = 0.50f
+)
+
+data class TrackBookmark(
+    val id: Long,
+    val trackId: Long,
+    val timestampMs: Long,
+    val label: String
+)
+
+data class MiniDiscCartridge(
+    val id: Long,
+    val discTitle: String,
+    val labelText: String = "MD-DATA / 74 MIN",
+    val colorHex: String = "#0055AA",
+    val atracMode: String = "SP", // "SP" (292kbps), "LP2" (132kbps), "LP4" (66kbps)
+    val tracks: List<Track> = emptyList(),
+    val isShutterOpen: Boolean = false
+)
 
 data class PlaybackState(
     val currentTrack: Track? = null,
@@ -54,6 +100,7 @@ data class PlaybackState(
     val tapeReelProgress: Float = 0.0f, // 0.0 to 1.0, changes reel radius
     val cdRotationAngle: Float = 0.0f,
     val antiSkipBufferPercent: Float = 1.0f,
+    val isCassetteInserted: Boolean = true,
     val activeDeckMode: HardwareNavScreen = HardwareNavScreen.CONTROL_DECK
 )
 
@@ -136,7 +183,7 @@ data class EqualizerState(
     ),
     val bassBoost: Int = 600, // 0 to 1000
     val virtualizer: Int = 450, // 0 to 1000
-    val presetName: String = "90s Rave Club"
+    val presetName: String = "Studio Reference"
 )
 
 enum class HardwareMaterial(val label: String, val baseColorHex: String, val borderColorHex: String) {
@@ -157,3 +204,36 @@ data class HardwareSkin(
     val tapeScratchesEnabled: Boolean = true,
     val highQualityVisualizer: Boolean = true
 )
+
+data class VinylState(
+    val rpm: Int = 33, // 33 or 45
+    val isTonearmCued: Boolean = true, // true = down on record, false = up/cued
+    val pitchPercent: Float = 0.0f, // -8.0% to +8.0%
+    val antiSkate: Float = 1.5f,
+    val platterRotationDeg: Float = 0.0f
+)
+
+data class PortaChannelState(
+    val channelNumber: Int,
+    val trimLevel: Float = 0.5f, // 0 to 1
+    val eqHigh: Float = 0.0f, // -12 to +12 dB
+    val eqLow: Float = 0.0f, // -12 to +12 dB
+    val pan: Float = 0.0f, // -1.0 (L) to +1.0 (R)
+    val faderLevel: Float = 0.75f, // 0 to 1
+    val isArmedForRec: Boolean = false,
+    val vuLevel: Float = 0.2f
+)
+
+data class FourTrackState(
+    val channels: List<PortaChannelState> = listOf(
+        PortaChannelState(1, vuLevel = 0.35f),
+        PortaChannelState(2, vuLevel = 0.28f),
+        PortaChannelState(3, vuLevel = 0.22f),
+        PortaChannelState(4, vuLevel = 0.40f)
+    ),
+    val masterFader: Float = 0.85f,
+    val pitchKnob: Float = 0.0f, // -12% to +12%
+    val isHighSpeed: Boolean = false, // false = 4.75 cm/s, true = 9.5 cm/s
+    val isDbxNoiseReductionOn: Boolean = true
+)
+

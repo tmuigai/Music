@@ -40,8 +40,22 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `verify hardware navigation screens enum contains 14 destinations`() {
-    assertEquals(14, HardwareNavScreen.values().size)
+  fun `verify hardware navigation screens enum contains 18 destinations`() {
+    assertEquals(18, HardwareNavScreen.values().size)
+    assertEquals("17", HardwareNavScreen.VINYL.code)
+    assertEquals("18", HardwareNavScreen.FOUR_TRACK.code)
     assertEquals(TapeSide.SIDE_A, TapeSide.valueOf("SIDE_A"))
+  }
+
+  @Test
+  fun `verify volume state supports 300 percent amplification with limiter and clipping`() {
+    val vol = com.example.model.MasterVolumeState(
+      amplificationPercent = 250,
+      isClipping = true,
+      limiterEnabled = true
+    )
+    assertEquals(250, vol.amplificationPercent)
+    assertTrue(vol.isClipping)
+    assertTrue(vol.limiterEnabled)
   }
 }
