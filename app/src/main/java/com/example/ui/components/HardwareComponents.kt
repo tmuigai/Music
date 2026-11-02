@@ -68,9 +68,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.HardwareNavCategory
 import com.example.model.HardwareNavScreen
 import com.example.model.StickerItem
 import com.example.model.TapeSide
+import com.example.model.audioFormat
 import com.example.ui.theme.AcidGreen
 import com.example.ui.theme.AcidGreenDim
 import com.example.ui.theme.BevelLight
@@ -216,63 +218,340 @@ fun HardwareHeader(
     }
 }
 
-// Navigation Selector Rack (the 8 primary hardware modes + room switcher)
+// Navigation Selector Rack: 5 Primary Hubs + Mechanical Sub-Selector Rack
 @Composable
 fun HardwareNavRack(
     currentScreen: HardwareNavScreen,
     accentColor: Color = AcidGreen,
-    onNavigate: (HardwareNavScreen) -> Unit
+    onNavigateCategory: (HardwareNavCategory) -> Unit,
+    onNavigateScreen: (HardwareNavScreen) -> Unit,
+    selectedLibraryTab: String = "SONGS",
+    onSelectLibraryTab: (String) -> Unit = {},
+    selectedSoundTab: String = "EQ",
+    onSelectSoundTab: (String) -> Unit = {}
 ) {
-    val scrollState = rememberScrollState()
+    val currentCategory = currentScreen.category
+    val subScrollState = rememberScrollState()
     val view = LocalView.current
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MatteBlack)
+            .background(GunmetalDark)
             .border(width = 1.dp, color = BorderHardware)
-            .horizontalScroll(scrollState)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        HardwareNavScreen.values().forEach { screen ->
-            val isSelected = screen == currentScreen
-            val bgColor = if (isSelected) GunmetalLight else GunmetalDark
-            val textColor = if (isSelected) accentColor else TextSecondary
-            val borderC = if (isSelected) accentColor else BorderHardware
+        // ROW 1: The 5 Primary Master Hardware Push Buttons
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MatteBlack)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            HardwareNavCategory.values().forEach { category ->
+                val isCategorySelected = category == currentCategory
+                val bgColor = if (isCategorySelected) GunmetalLight else GunmetalDark
+                val textColor = if (isCategorySelected) accentColor else TextSecondary
+                val borderC = if (isCategorySelected) accentColor else BorderHardware
 
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(bgColor)
-                    .border(1.dp, borderC, RoundedCornerShape(2.dp))
-                    .clickable {
-                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                        onNavigate(screen)
-                    }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isSelected) {
-                        Box(
-                            modifier = Modifier
-                                .size(5.dp)
-                                .clip(CircleShape)
-                                .background(accentColor)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(bgColor)
+                        .border(1.5.dp, borderC, RoundedCornerShape(3.dp))
+                        .clickable {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            onNavigateCategory(category)
+                        }
+                        .testTag("nav_btn_${category.name.lowercase()}")
+                        .padding(horizontal = 2.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        // LED and Category Title
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isCategorySelected) accentColor else Color(0xFF2A2D30))
+                                    .border(0.5.dp, if (isCategorySelected) BevelLight else Color(0xFF1A1A1A), CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = category.title,
+                                fontFamily = ChakraPetchFont,
+                                fontSize = 10.sp,
+                                fontWeight = if (isCategorySelected) FontWeight.Bold else FontWeight.Medium,
+                                color = textColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = category.code,
+                            fontFamily = ShareTechMonoFont,
+                            fontSize = 8.sp,
+                            color = if (isCategorySelected) accentColor.copy(alpha = 0.8f) else TextMuted
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
                     }
-                    Text(
-                        text = screen.title,
-                        fontFamily = ChakraPetchFont,
-                        fontSize = 11.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = textColor,
-                        letterSpacing = 0.5.sp
+                }
+            }
+        }
+
+        // ROW 2: Tactile Sub-Selector Strip for the active category
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF101214))
+                .border(width = 0.5.dp, color = BorderHardware)
+                .horizontalScroll(subScrollState)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Label prefix for sub-rack
+            Text(
+                text = "${currentCategory.title} //",
+                fontFamily = ShareTechMonoFont,
+                fontSize = 9.sp,
+                color = TextMuted,
+                modifier = Modifier.padding(end = 2.dp)
+            )
+
+            when (currentCategory) {
+                HardwareNavCategory.HOME -> {
+                    SubRackButton(
+                        label = "CONTROL DECK",
+                        code = "01",
+                        isSelected = currentScreen == HardwareNavScreen.CONTROL_DECK,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.CONTROL_DECK) }
+                    )
+                    SubRackButton(
+                        label = "CASSETTE DECK",
+                        code = "02",
+                        isSelected = false,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.CASSETTE) }
+                    )
+                    SubRackButton(
+                        label = "MASTER AMP",
+                        code = "AMP",
+                        isSelected = false,
+                        accentColor = accentColor,
+                        onClick = {
+                            onSelectSoundTab("VOLUME")
+                            onNavigateScreen(HardwareNavScreen.SOUND_LAB)
+                        }
+                    )
+                    SubRackButton(
+                        label = "CRATE VAULT",
+                        code = "06",
+                        isSelected = false,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.MIXTAPE_LIBRARY) }
+                    )
+                }
+
+                HardwareNavCategory.MACHINES -> {
+                    // Physical Machines: Cassette, CD, DJ, MiniDisc, Boombox, Vinyl, Four-track, Rotary Phone, Party Jukebox
+                    val machineList = listOf(
+                        HardwareNavScreen.CASSETTE to "CASSETTE",
+                        HardwareNavScreen.DISCMAN to "CD (DISCMAN)",
+                        HardwareNavScreen.DJ_DECK to "DJ MIXER",
+                        HardwareNavScreen.MINIDISC to "MINIDISC",
+                        HardwareNavScreen.BOOMBOX to "BOOMBOX",
+                        HardwareNavScreen.VINYL to "VINYL",
+                        HardwareNavScreen.FOUR_TRACK to "FOUR-TRACK",
+                        HardwareNavScreen.ROTARY_PHONE to "ROTARY PHONE",
+                        HardwareNavScreen.PARTY_JUKEBOX to "JUKEBOX"
+                    )
+                    machineList.forEach { (screen, label) ->
+                        SubRackButton(
+                            label = label,
+                            code = screen.code,
+                            isSelected = currentScreen == screen,
+                            accentColor = accentColor,
+                            onClick = { onNavigateScreen(screen) }
+                        )
+                    }
+                }
+
+                HardwareNavCategory.LIBRARY -> {
+                    // Library Sub-Destinations: Songs, Albums, Artists, Playlists, Mixtapes
+                    val libTabs = listOf("SONGS", "ALBUMS", "ARTISTS", "PLAYLISTS", "MIXTAPES")
+                    libTabs.forEach { tab ->
+                        val isSel = currentScreen == HardwareNavScreen.MIXTAPE_LIBRARY && selectedLibraryTab == tab
+                        SubRackButton(
+                            label = tab,
+                            code = tab.take(3),
+                            isSelected = isSel,
+                            accentColor = accentColor,
+                            onClick = {
+                                onSelectLibraryTab(tab)
+                                if (currentScreen != HardwareNavScreen.MIXTAPE_LIBRARY) {
+                                    onNavigateScreen(HardwareNavScreen.MIXTAPE_LIBRARY)
+                                }
+                            }
+                        )
+                    }
+                }
+
+                HardwareNavCategory.SOUND -> {
+                    // Sound Sub-Destinations: Lyrics, EQ, Volume, Visualisers, Recording, Discovery
+                    SubRackButton(
+                        label = "LYRICS",
+                        code = "LRC",
+                        isSelected = currentScreen == HardwareNavScreen.LYRICS_ROOM,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.LYRICS_ROOM) }
+                    )
+                    SubRackButton(
+                        label = "EQ",
+                        code = "EQ",
+                        isSelected = currentScreen == HardwareNavScreen.SOUND_LAB && selectedSoundTab == "EQ",
+                        accentColor = accentColor,
+                        onClick = {
+                            onSelectSoundTab("EQ")
+                            onNavigateScreen(HardwareNavScreen.SOUND_LAB)
+                        }
+                    )
+                    SubRackButton(
+                        label = "VOLUME (300%)",
+                        code = "VOL",
+                        isSelected = currentScreen == HardwareNavScreen.SOUND_LAB && selectedSoundTab == "VOLUME",
+                        accentColor = accentColor,
+                        onClick = {
+                            onSelectSoundTab("VOLUME")
+                            onNavigateScreen(HardwareNavScreen.SOUND_LAB)
+                        }
+                    )
+                    SubRackButton(
+                        label = "VISUALISERS",
+                        code = "VIS",
+                        isSelected = currentScreen == HardwareNavScreen.SOUND_LAB && selectedSoundTab == "VISUALISERS",
+                        accentColor = accentColor,
+                        onClick = {
+                            onSelectSoundTab("VISUALISERS")
+                            onNavigateScreen(HardwareNavScreen.SOUND_LAB)
+                        }
+                    )
+                    SubRackButton(
+                        label = "RECORDING",
+                        code = "REC",
+                        isSelected = currentScreen == HardwareNavScreen.RECORDING_BOOTH,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.RECORDING_BOOTH) }
+                    )
+                    SubRackButton(
+                        label = "DISCOVERY",
+                        code = "DSC",
+                        isSelected = currentScreen == HardwareNavScreen.DISCOVERY_MACHINE,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.DISCOVERY_MACHINE) }
+                    )
+                }
+
+                HardwareNavCategory.WORKSHOP -> {
+                    // Workshop Sub-Destinations: Customisation, Collection Room, Archive, Settings, Build-A-Machine
+                    SubRackButton(
+                        label = "BUILD-A-MACHINE",
+                        code = "21",
+                        isSelected = currentScreen == HardwareNavScreen.BUILD_A_MACHINE,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.BUILD_A_MACHINE) }
+                    )
+                    SubRackButton(
+                        label = "CUSTOMISE",
+                        code = "08",
+                        isSelected = currentScreen == HardwareNavScreen.WORKSHOP,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.WORKSHOP) }
+                    )
+                    SubRackButton(
+                        label = "COLLECTION ROOM",
+                        code = "09",
+                        isSelected = currentScreen == HardwareNavScreen.VIRTUAL_ROOM,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.VIRTUAL_ROOM) }
+                    )
+                    SubRackButton(
+                        label = "ARCHIVE / DIARY",
+                        code = "14",
+                        isSelected = currentScreen == HardwareNavScreen.MUSIC_DIARY,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.MUSIC_DIARY) }
+                    )
+                    SubRackButton(
+                        label = "OBSESSION",
+                        code = "13",
+                        isSelected = currentScreen == HardwareNavScreen.OBSESSION_MODE,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.OBSESSION_MODE) }
+                    )
+                    SubRackButton(
+                        label = "SETTINGS (FM)",
+                        code = "11",
+                        isSelected = currentScreen == HardwareNavScreen.RADIO_MODE,
+                        accentColor = accentColor,
+                        onClick = { onNavigateScreen(HardwareNavScreen.RADIO_MODE) }
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun SubRackButton(
+    label: String,
+    code: String,
+    isSelected: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    val view = LocalView.current
+    val bgColor = if (isSelected) GunmetalLight else GunmetalDark
+    val textColor = if (isSelected) accentColor else TextSecondary
+    val borderC = if (isSelected) accentColor else BorderHardware
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(2.dp))
+            .background(bgColor)
+            .border(1.dp, borderC, RoundedCornerShape(2.dp))
+            .clickable {
+                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onClick()
+            }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(accentColor)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+            Text(
+                text = label,
+                fontFamily = ChakraPetchFont,
+                fontSize = 10.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = textColor,
+                letterSpacing = 0.5.sp
+            )
         }
     }
 }
@@ -1108,7 +1387,10 @@ fun LibraryTrackRow(
     isPlaying: Boolean,
     accentColor: Color,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSelectable: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: () -> Unit = {}
 ) {
     val view = LocalView.current
     val min = (track.durationMs / 1000) / 60
@@ -1118,15 +1400,15 @@ fun LibraryTrackRow(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(2.dp))
-            .background(if (isCurrent) GunmetalLight else GunmetalDark)
+            .background(if (isSelected) GunmetalLight else if (isCurrent) GunmetalLight else GunmetalDark)
             .border(
                 1.dp,
-                if (isCurrent) accentColor else BorderHardware,
+                if (isSelected) BurntOrange else if (isCurrent) accentColor else BorderHardware,
                 RoundedCornerShape(2.dp)
             )
             .clickable {
                 view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                onClick()
+                if (isSelectable) onToggleSelect() else onClick()
             }
             .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
@@ -1139,6 +1421,22 @@ fun LibraryTrackRow(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (isSelectable) {
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(if (isSelected) BurntOrange else MatteBlack)
+                            .border(1.dp, if (isSelected) BurntOrange else BorderHardware, RoundedCornerShape(2.dp))
+                            .clickable { onToggleSelect() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isSelected) {
+                            Text("✓", color = MatteBlack, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
                 Text(
                     text = String.format("%02d", index),
                     fontFamily = ShareTechMonoFont,
@@ -1176,13 +1474,111 @@ fun LibraryTrackRow(
                 }
             }
 
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MatteBlack)
+                        .border(
+                            0.5.dp,
+                            if (track.audioFormat == "FLAC" || track.audioFormat == "WAV") BurntOrange else BorderHardware,
+                            RoundedCornerShape(2.dp)
+                        )
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = track.audioFormat,
+                        fontFamily = ShareTechMonoFont,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (track.audioFormat == "FLAC" || track.audioFormat == "WAV") BurntOrange else TextSecondary
+                    )
+                }
+                Text(
+                    text = String.format("%02d:%02d", min, sec),
+                    fontFamily = ShareTechMonoFont,
+                    fontSize = 10.sp,
+                    color = if (isCurrent) accentColor else TextMuted
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HardwarePushSwitch(
+    label: String,
+    code: String,
+    isActive: Boolean,
+    activeColor: Color = AcidGreen,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val view = LocalView.current
+    Box(
+        modifier = modifier
+            .height(48.dp)
+            .clip(RoundedCornerShape(3.dp))
+            .background(if (isActive) GunmetalLight else GunmetalDark)
+            .border(1.5.dp, if (isActive) activeColor else BorderHardware, RoundedCornerShape(3.dp))
+            .clickable {
+                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onClick()
+            }
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(if (isActive) activeColor else Color(0xFF22262B))
+                        .border(0.5.dp, if (isActive) BevelLight else Color(0xFF111111), CircleShape)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = label,
+                    fontFamily = ChakraPetchFont,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp,
+                    color = if (isActive) TextPrimary else TextSecondary,
+                    maxLines = 1
+                )
+            }
             Text(
-                text = String.format("%02d:%02d", min, sec),
+                text = code,
                 fontFamily = ShareTechMonoFont,
-                fontSize = 10.sp,
-                color = if (isCurrent) accentColor else TextMuted
+                fontSize = 8.sp,
+                color = if (isActive) activeColor else TextMuted
             )
         }
     }
 }
+
+@Composable
+fun HardwareSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    activeColor: Color = AcidGreen,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f
+) {
+    androidx.compose.material3.Slider(
+        value = value,
+        onValueChange = onValueChange,
+        valueRange = valueRange,
+        colors = androidx.compose.material3.SliderDefaults.colors(
+            thumbColor = activeColor,
+            activeTrackColor = activeColor,
+            inactiveTrackColor = GunmetalLight
+        ),
+        modifier = modifier
+    )
+}
+
 

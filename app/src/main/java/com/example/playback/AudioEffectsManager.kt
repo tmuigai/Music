@@ -7,6 +7,7 @@ import android.media.audiofx.Virtualizer
 import android.os.Build
 import android.util.Log
 import com.example.model.EqualizerState
+import com.example.model.ListeningEnvironment
 import com.example.model.MasterVolumeState
 import com.example.model.OutputProfile
 import com.example.model.TapeDegradationState
@@ -242,23 +243,70 @@ class AudioEffectsManager {
         }
     }
 
+    private var currentSongOffsetDb: Float = 0.0f
+
+    fun setPerSongGainOffset(gainDb: Float) {
+        currentSongOffsetDb = gainDb.coerceIn(-12f, 12f)
+        applyCombinedGain()
+    }
+
+    private fun applyCombinedGain() {
+        val basePreamp = _volumeState.value.preampGainDb
+        val combinedGainDb = basePreamp + currentSongOffsetDb
+        val ampBonus = ((_volumeState.value.amplificationPercent - 100) * 15).coerceAtLeast(0)
+        val combinedmB = (combinedGainDb * 100).toInt() + ampBonus
+        try {
+            loudnessEnhancer?.setTargetGain(combinedmB.coerceAtLeast(0))
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to apply combined gain: ${e.message}")
+        }
+    }
+
+    fun setParametricEq(freqHz: Float, bandwidthQ: Float, gainDb: Float) {
+        _eqState.value = _eqState.value.copy(
+            parametricFreqHz = freqHz.coerceIn(20f, 20000f),
+            parametricBandwidthQ = bandwidthQ.coerceIn(0.1f, 10f),
+            parametricGainDb = gainDb.coerceIn(-18f, 18f)
+        )
+    }
+
+    fun applyEnvironment(env: ListeningEnvironment) {
+        setAmplificationPercent(env.ampBoostPercent)
+        setBassBoost(env.bassBoostStrength)
+        _tapeDegradation.value = _tapeDegradation.value.copy(tapeHissEnabled = env.tapeHissEnabled)
+        applyPreset(env.eqPreset)
+    }
+
     fun applyPreset(presetName: String) {
         val bands = when (presetName) {
-            "90s Club" -> mapOf(0 to 6, 1 to 3, 2 to 0, 3 to 4, 4 to 6)
-            "Tape Cassette Warmth" -> mapOf(0 to 4, 1 to 5, 2 to 2, 3 to -1, 4 to -4)
-            "Discman Crystal" -> mapOf(0 to 2, 1 to 1, 2 to 3, 3 to 5, 4 to 7)
-            "Deep Bass" -> mapOf(0 to 9, 1 to 5, 2 to -2, 3 to 1, 4 to 2)
-            "Vocal & Lyric" -> mapOf(0 to -2, 1 to 1, 2 to 6, 3 to 5, 4 to 1)
-            else -> mapOf(0 to 0, 1 to 0, 2 to 0, 3 to 0, 4 to 0) // Flat
+            "90s Rave Club" -> mapOf(
+                0 to 6, 1 to 5, 2 to 4, 3 to 2, 4 to 0, 5 to 1, 6 to 3, 7 to 5, 8 to 6, 9 to 7
+            )
+            "Tape Cassette Warmth" -> mapOf(
+                0 to 5, 1 to 4, 2 to 5, 3 to 3, 4 to 1, 5 to -1, 6 to -2, 7 to -3, 8 to -5, 9 to -6
+            )
+            "Discman Crystal" -> mapOf(
+                0 to 1, 1 to 2, 2 to 1, 3 to 2, 4 to 3, 5 to 4, 6 to 5, 7 to 6, 8 to 7, 9 to 8
+            )
+            "Underground Bass" -> mapOf(
+                0 to 10, 1 to 8, 2 to 6, 3 to 3, 4 to 0, 5 to 0, 6 to 1, 7 to 2, 8 to 3, 9 to 2
+            )
+            "Studio Reference", "Flat" -> mapOf(
+                0 to 0, 1 to 0, 2 to 0, 3 to 0, 4 to 0, 5 to 0, 6 to 0, 7 to 0, 8 to 0, 9 to 0
+            )
+            else -> mapOf(
+                0 to 0, 1 to 0, 2 to 0, 3 to 0, 4 to 0, 5 to 0, 6 to 0, 7 to 0, 8 to 0, 9 to 0
+            )
         }
         val bb = when (presetName) {
-            "Deep Bass" -> 900
-            "90s Club" -> 700
+            "Underground Bass" -> 900
+            "90s Rave Club" -> 750
             "Tape Cassette Warmth" -> 450
             else -> 200
         }
         _eqState.value = EqualizerState(
             isEnabled = true,
+            is10BandMode = true,
             bands = bands,
             bassBoost = bb,
             virtualizer = 400,

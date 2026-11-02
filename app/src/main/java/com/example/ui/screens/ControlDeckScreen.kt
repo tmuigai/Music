@@ -44,12 +44,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.TrackBookmarkEntity
 import com.example.model.HardwareNavScreen
+import com.example.model.ListeningEnvironment
 import com.example.model.MasterVolumeState
 import com.example.model.OutputProfile
 import com.example.model.PlaybackState
@@ -100,6 +102,8 @@ fun ControlDeckScreen(
     onTriggerFilePicker: () -> Unit,
     onEjectCassette: () -> Unit = {},
     onInsertCassette: () -> Unit = {},
+    currentEnvironment: ListeningEnvironment = ListeningEnvironment.HEADPHONES,
+    onApplyEnvironment: (ListeningEnvironment) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
@@ -321,6 +325,95 @@ fun ControlDeckScreen(
                                     fontSize = 9.sp,
                                     color = if (isSel) accentColor else TextSecondary
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // LISTENING ENVIRONMENT PROFILES (BEDROOM, NIGHT DRIVE, HEADPHONES, STUDIO, PARTY, QUIET)
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(GunmetalDark)
+                    .border(1.dp, BorderHardware, RoundedCornerShape(4.dp))
+                    .padding(10.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "LISTENING ENVIRONMENT // PRESETS",
+                            fontFamily = ChakraPetchFont,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = AcidGreen
+                        )
+                        Text(
+                            text = currentEnvironment.title,
+                            fontFamily = ShareTechMonoFont,
+                            fontSize = 9.sp,
+                            color = BurntOrange
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(ListeningEnvironment.values()) { env ->
+                            val isSel = currentEnvironment == env
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(if (isSel) Color(0xFF1E281E) else MatteBlack)
+                                    .border(1.5.dp, if (isSel) AcidGreen else BorderHardware, RoundedCornerShape(3.dp))
+                                    .clickable {
+                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        onApplyEnvironment(env)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                                    .testTag("env_${env.name.lowercase()}")
+                            ) {
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isSel) AcidGreen else Color(0xFF333333))
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = env.title,
+                                            fontFamily = ChakraPetchFont,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = if (isSel) AcidGreen else TextPrimary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = env.code,
+                                        fontFamily = ShareTechMonoFont,
+                                        fontSize = 8.sp,
+                                        color = BurntOrange
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = env.description,
+                                        fontFamily = ShareTechMonoFont,
+                                        fontSize = 8.sp,
+                                        color = TextMuted,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     }

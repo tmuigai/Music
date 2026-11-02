@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,12 +44,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.EqualizerState
+import com.example.model.MasterVolumeState
+import com.example.model.OutputProfile
+import com.example.model.PlaybackState
 import com.example.model.TapeDegradationState
 import com.example.ui.components.StereoVuMeters
 import com.example.ui.theme.AcidGreen
+import com.example.ui.theme.BevelLight
 import com.example.ui.theme.BorderHardware
 import com.example.ui.theme.BurntOrange
 import com.example.ui.theme.ChakraPetchFont
+import com.example.ui.theme.DangerRed
 import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.GunmetalDark
 import com.example.ui.theme.GunmetalLight
@@ -78,6 +84,22 @@ fun SoundLaboratoryScreen(
     onToggleTapeHiss: () -> Unit,
     onToggleWowFlutter: () -> Unit,
     onSetSaturationWarmth: (Float) -> Unit,
+    volumeState: MasterVolumeState? = null,
+    onSetVolume: ((Int) -> Unit)? = null,
+    onSetPreamp: ((Float) -> Unit)? = null,
+    onSetBalance: ((Float) -> Unit)? = null,
+    onToggleMute: (() -> Unit)? = null,
+    onSetOutputProfile: ((OutputProfile) -> Unit)? = null,
+    onToggleExperimentalCeiling: (() -> Unit)? = null,
+    playbackState: PlaybackState? = null,
+    onSetCrossfade: ((Int) -> Unit)? = null,
+    onSetAbPointA: (() -> Unit)? = null,
+    onSetAbPointB: (() -> Unit)? = null,
+    onClearAb: (() -> Unit)? = null,
+    onStartSleepTimer: ((Int) -> Unit)? = null,
+    onCancelSleepTimer: (() -> Unit)? = null,
+    selectedSection: String = "EQ",
+    onSectionSelect: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
@@ -110,7 +132,7 @@ fun SoundLaboratoryScreen(
                         letterSpacing = 1.sp
                     )
                     Text(
-                        text = "5-BAND EQUALIZER & HARDWARE FX",
+                        text = "5-BAND EQUALIZER & MASTER AMPLIFIER",
                         fontFamily = ShareTechMonoFont,
                         fontSize = 10.sp,
                         color = TextMuted
@@ -132,6 +154,544 @@ fun SoundLaboratoryScreen(
                             checkedTrackColor = GunmetalLight
                         )
                     )
+                }
+            }
+        }
+
+        // Section Selector Tabs: EQ, VOLUME, VISUALISERS, TAPE FX, ENGINE
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                listOf("EQ", "VOLUME", "VISUALISERS", "TAPE FX", "ENGINE").forEach { sec ->
+                    val isSel = sec == selectedSection
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (isSel) GunmetalLight else GunmetalDark)
+                            .border(1.dp, if (isSel) accentColor else BorderHardware, RoundedCornerShape(3.dp))
+                            .clickable {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                onSectionSelect(sec)
+                            }
+                            .padding(vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = sec,
+                            fontFamily = ChakraPetchFont,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 9.sp,
+                            color = if (isSel) accentColor else TextSecondary,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+
+        // Volume Amplification Section (When VOLUME is selected)
+        if (selectedSection == "VOLUME" && volumeState != null) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(GunmetalDark)
+                        .border(1.dp, BorderHardware, RoundedCornerShape(4.dp))
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "MASTER AMPLIFICATION // 300% VLC BOOST",
+                                fontFamily = ChakraPetchFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = TextPrimary
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (volumeState.isMuted) "MUTED" else "${volumeState.amplificationPercent}%",
+                                    fontFamily = ShareTechMonoFont,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = if (volumeState.isMuted) DangerRed else if (volumeState.isClipping) BurntOrange else AcidGreen
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                if (onToggleMute != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(if (volumeState.isMuted) DangerRed else GunmetalMedium)
+                                            .clickable { onToggleMute() }
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = if (volumeState.isMuted) "UNMUTE" else "MUTE",
+                                            fontFamily = ChakraPetchFont,
+                                            fontSize = 9.sp,
+                                            color = if (volumeState.isMuted) MatteBlack else TextPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (volumeState.isClipping) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "⚠ DIGITAL CLIPPING DETECTED — REDUCE PREAMP GAIN",
+                                fontFamily = ShareTechMonoFont,
+                                fontSize = 9.sp,
+                                color = DangerRed
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Amplification Slider (up to 300% or 500%)
+                        val maxAmp = if (volumeState.allowExperimentalCeiling) 500f else 300f
+                        if (onSetVolume != null) {
+                            Slider(
+                                value = volumeState.amplificationPercent.toFloat(),
+                                onValueChange = { onSetVolume(it.toInt()) },
+                                valueRange = 0f..maxAmp,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = if (volumeState.amplificationPercent > 100) BurntOrange else AcidGreen,
+                                    activeTrackColor = if (volumeState.amplificationPercent > 100) BurntOrange else AcidGreen
+                                )
+                            )
+                        }
+
+                        // Preamp Gain Slider
+                        if (onSetPreamp != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(text = "DIGITAL PREAMP GAIN", fontFamily = ChakraPetchFont, fontSize = 10.sp, color = TextSecondary)
+                                Text(text = String.format("%+.1f dB", volumeState.preampGainDb), fontFamily = ShareTechMonoFont, fontSize = 10.sp, color = BurntOrange)
+                            }
+                            Slider(
+                                value = volumeState.preampGainDb,
+                                onValueChange = { onSetPreamp(it) },
+                                valueRange = -12f..18f,
+                                colors = SliderDefaults.colors(thumbColor = BurntOrange, activeTrackColor = BurntOrange)
+                            )
+                        }
+
+                        // Stereo Balance Slider
+                        if (onSetBalance != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(text = "STEREO BALANCE (PAN)", fontFamily = ChakraPetchFont, fontSize = 10.sp, color = TextSecondary)
+                                val panLabel = when {
+                                    volumeState.balancePan < -0.05f -> "L ${(-volumeState.balancePan * 100).toInt()}%"
+                                    volumeState.balancePan > 0.05f -> "R ${(volumeState.balancePan * 100).toInt()}%"
+                                    else -> "CENTER"
+                                }
+                                Text(text = panLabel, fontFamily = ShareTechMonoFont, fontSize = 10.sp, color = LcdCyan)
+                            }
+                            Slider(
+                                value = volumeState.balancePan,
+                                onValueChange = { onSetBalance(it) },
+                                valueRange = -1.0f..1.0f,
+                                colors = SliderDefaults.colors(thumbColor = LcdCyan, activeTrackColor = LcdCyan)
+                            )
+                        }
+
+                        // Output Device Profiles & 500% Ceiling
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (onSetOutputProfile != null) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    OutputProfile.values().forEach { profile ->
+                                        val isSel = profile == volumeState.outputProfile
+                                        Box(
+                                            modifier = Modifier
+                                                .background(if (isSel) GunmetalLight else MatteBlack)
+                                                .border(1.dp, if (isSel) accentColor else BorderHardware, RoundedCornerShape(2.dp))
+                                                .clickable { onSetOutputProfile(profile) }
+                                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                                        ) {
+                                            Text(
+                                                text = profile.name.take(4),
+                                                fontFamily = ChakraPetchFont,
+                                                fontSize = 9.sp,
+                                                color = if (isSel) accentColor else TextSecondary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (onToggleExperimentalCeiling != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(if (volumeState.allowExperimentalCeiling) BurntOrange else MatteBlack)
+                                        .border(1.dp, BorderHardware, RoundedCornerShape(2.dp))
+                                        .clickable { onToggleExperimentalCeiling() }
+                                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = if (volumeState.allowExperimentalCeiling) "500% UNLOCKED" else "300% CEIL",
+                                        fontFamily = ChakraPetchFont,
+                                        fontSize = 9.sp,
+                                        color = if (volumeState.allowExperimentalCeiling) MatteBlack else TextMuted
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Music Engine Operations (When ENGINE is selected)
+        if (selectedSection == "ENGINE") {
+            // Audio Diagnostics
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(GunmetalDark)
+                        .border(1.dp, BorderHardware, RoundedCornerShape(4.dp))
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "DSP AUDIO DIAGNOSTICS & TELEMETRY",
+                                fontFamily = ChakraPetchFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = AcidGreen
+                            )
+                            Text(
+                                text = "REAL-TIME PIPELINE",
+                                fontFamily = ShareTechMonoFont,
+                                fontSize = 9.sp,
+                                color = TextMuted
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        val diag = playbackState?.audioDiagnostics
+                        val metrics = listOf(
+                            "AUDIO CODEC" to (diag?.codec ?: "PCM / 16-Bit FLAC/MP3"),
+                            "SAMPLE RATE" to "${diag?.sampleRateKhz ?: 44.1f} kHz",
+                            "BIT DEPTH" to "${diag?.bitDepth ?: 16}-Bit Master",
+                            "CHANNELS" to (diag?.channels ?: "Stereo 2.0 (L/R)"),
+                            "OUTPUT ROUTE" to (diag?.activeOutput ?: "High Definition Audio Route"),
+                            "GAIN MEMORY" to "${String.format("%+.1f", diag?.perSongGainOffsetDb ?: 0.0f)} dB"
+                        )
+
+                        metrics.forEach { (label, value) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontFamily = ShareTechMonoFont,
+                                    fontSize = 9.sp,
+                                    color = TextMuted
+                                )
+                                Text(
+                                    text = value,
+                                    fontFamily = ShareTechMonoFont,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // AB Repeat Loop Control
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(GunmetalDark)
+                        .border(1.dp, BorderHardware, RoundedCornerShape(4.dp))
+                        .padding(12.dp)
+                ) {
+                    val ab = playbackState?.abRepeat
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "A-B REPEAT CONTINUOUS LOOP",
+                                fontFamily = ChakraPetchFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = BurntOrange
+                            )
+                            Text(
+                                text = if (ab?.isEnabled == true) "LOOP ENGAGED" else "DISENGAGED",
+                                fontFamily = ShareTechMonoFont,
+                                fontSize = 9.sp,
+                                color = if (ab?.isEnabled == true) AcidGreen else TextMuted
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(if (ab?.pointA != null) GunmetalLight else MatteBlack)
+                                    .border(1.dp, if (ab?.pointA != null) AcidGreen else BorderHardware, RoundedCornerShape(3.dp))
+                                    .clickable {
+                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        onSetAbPointA?.invoke()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "MARK [A]", fontFamily = ChakraPetchFont, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = TextPrimary)
+                                    val aTime = if (ab?.pointA != null) "${ab.pointA / 1000}s" else "--"
+                                    Text(text = aTime, fontFamily = ShareTechMonoFont, fontSize = 8.sp, color = AcidGreen)
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(if (ab?.pointB != null) GunmetalLight else MatteBlack)
+                                    .border(1.dp, if (ab?.pointB != null) AcidGreen else BorderHardware, RoundedCornerShape(3.dp))
+                                    .clickable {
+                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        onSetAbPointB?.invoke()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "MARK [B]", fontFamily = ChakraPetchFont, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = TextPrimary)
+                                    val bTime = if (ab?.pointB != null) "${ab.pointB / 1000}s" else "--"
+                                    Text(text = bTime, fontFamily = ShareTechMonoFont, fontSize = 8.sp, color = AcidGreen)
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(GunmetalDark)
+                                    .border(1.dp, DangerRed, RoundedCornerShape(3.dp))
+                                    .clickable {
+                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        onClearAb?.invoke()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = "CLEAR LOOP", fontFamily = ChakraPetchFont, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = DangerRed)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Sleep Timer with 30s Gentle Fadeout
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(GunmetalDark)
+                        .border(1.dp, BorderHardware, RoundedCornerShape(4.dp))
+                        .padding(12.dp)
+                ) {
+                    val timer = playbackState?.sleepTimer
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "SLEEP TIMER // 30s FADEOUT",
+                                fontFamily = ChakraPetchFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = LcdCyan
+                            )
+                            val timerStatus = when {
+                                timer?.fadeoutActive == true -> "FADING OUT NOW"
+                                timer?.isRunning == true -> "${timer.remainingSeconds / 60}m ${timer.remainingSeconds % 60}s"
+                                else -> "OFF"
+                            }
+                            Text(
+                                text = timerStatus,
+                                fontFamily = ShareTechMonoFont,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (timer?.isRunning == true) BurntOrange else TextMuted
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(15, 30, 45, 60).forEach { mins ->
+                                val isTimerForMin = timer?.isRunning == true && timer.totalMinutes == mins
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(if (isTimerForMin) LcdCyan else MatteBlack)
+                                    .border(1.dp, if (isTimerForMin) LcdCyan else BorderHardware, RoundedCornerShape(2.dp))
+                                    .clickable {
+                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        onStartSleepTimer?.invoke(mins)
+                                    },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${mins}M",
+                                        fontFamily = ChakraPetchFont,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = if (isTimerForMin) MatteBlack else TextPrimary
+                                    )
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(GunmetalDark)
+                                    .border(1.dp, DangerRed, RoundedCornerShape(2.dp))
+                                    .clickable {
+                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        onCancelSleepTimer?.invoke()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "OFF",
+                                    fontFamily = ChakraPetchFont,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    color = DangerRed
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Gapless & Crossfade Duration Selector
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(GunmetalDark)
+                        .border(1.dp, BorderHardware, RoundedCornerShape(4.dp))
+                        .padding(12.dp)
+                ) {
+                    val currentCrossfade = playbackState?.crossfadeDurationSec ?: 0
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "GAPLESS PLAYBACK & CROSSFADE",
+                                fontFamily = ChakraPetchFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = AcidGreen
+                            )
+                            Text(
+                                text = if (currentCrossfade == 0) "GAPLESS DIRECT" else "${currentCrossfade}s BLEND",
+                                fontFamily = ShareTechMonoFont,
+                                fontSize = 9.sp,
+                                color = BurntOrange
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val crossfadeOptions = listOf(0 to "0s (GAPLESS)", 2 to "2s", 4 to "4s", 8 to "8s", 12 to "12s")
+                            crossfadeOptions.forEach { (sec, label) ->
+                                val isSel = currentCrossfade == sec
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(if (isSel) AcidGreen else MatteBlack)
+                                        .border(1.dp, if (isSel) BevelLight else BorderHardware, RoundedCornerShape(2.dp))
+                                        .clickable {
+                                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                            onSetCrossfade?.invoke(sec)
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontFamily = ChakraPetchFont,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 9.sp,
+                                        color = if (isSel) MatteBlack else TextPrimary,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

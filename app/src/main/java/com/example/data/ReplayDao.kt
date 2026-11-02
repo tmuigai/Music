@@ -13,8 +13,17 @@ interface ReplayDao {
     @Query("SELECT * FROM tracks ORDER BY title ASC")
     fun getAllTracks(): Flow<List<TrackEntity>>
 
+    @Query("SELECT * FROM tracks ORDER BY title ASC")
+    suspend fun getAllTracksSnapshot(): List<TrackEntity>
+
     @Query("SELECT * FROM tracks WHERE id = :id")
     suspend fun getTrackById(id: Long): TrackEntity?
+
+    @Query("SELECT id FROM tracks")
+    suspend fun getAllTrackIds(): List<Long>
+
+    @Query("SELECT contentUri FROM tracks")
+    suspend fun getAllContentUris(): List<String>
 
     @Query("SELECT * FROM tracks WHERE isFavorite = 1 ORDER BY lastPlayedMs DESC")
     fun getFavoriteTracks(): Flow<List<TrackEntity>>
@@ -42,6 +51,18 @@ interface ReplayDao {
 
     @Query("UPDATE tracks SET customLyrics = :lyrics WHERE id = :trackId")
     suspend fun updateLyrics(trackId: Long, lyrics: String)
+
+    @Query("UPDATE tracks SET volumeGainOffsetDb = :gainDb WHERE id = :trackId")
+    suspend fun updateTrackVolumeGainOffset(trackId: Long, gainDb: Float)
+
+    @Query("UPDATE tracks SET year = :year, genre = :genre WHERE id IN (:trackIds)")
+    suspend fun bulkUpdateMetadata(trackIds: List<Long>, year: Int, genre: String)
+
+    @Query("DELETE FROM tracks WHERE id = :trackId")
+    suspend fun deleteTrack(trackId: Long)
+
+    @Query("DELETE FROM tracks WHERE id IN (:trackIds)")
+    suspend fun deleteTracks(trackIds: List<Long>)
 
     @Query("DELETE FROM tracks WHERE id >= 9901 AND id <= 9905")
     suspend fun purgeSyntheticTestTracks()

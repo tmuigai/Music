@@ -23,6 +23,7 @@ import com.example.model.RepeatMode
 import com.example.model.TapeSide
 import com.example.model.Track
 import com.example.model.VinylState
+import kotlin.math.PI
 import kotlin.math.sin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -80,6 +81,20 @@ class ReplayAudioEngine(
 
     private val _fourTrackState = MutableStateFlow(FourTrackState())
     val fourTrackState: StateFlow<FourTrackState> = _fourTrackState.asStateFlow()
+
+    // AB Repeat and Sleep Timer
+    private var sleepTimerJob: Job? = null
+
+    // DJ Hot Cues (Cue 1 to 4)
+    private val _hotCues = MutableStateFlow<Map<Int, Long>>(
+        mapOf(1 to 0L, 2 to 15000L, 3 to 30000L, 4 to 45000L)
+    )
+    val hotCues: StateFlow<Map<Int, Long>> = _hotCues.asStateFlow()
+
+    // Tap Tempo BPM
+    private val tapTimestamps = mutableListOf<Long>()
+    private val _detectedBpm = MutableStateFlow(128)
+    val detectedBpm: StateFlow<Int> = _detectedBpm.asStateFlow()
 
     // Cassette Side A / Side B tracks
     private var currentCassetteSide: TapeSide = TapeSide.SIDE_A
@@ -148,6 +163,14 @@ class ReplayAudioEngine(
                 cdRotationAngle = cdAngle
             )
 
+            // AB Repeat loop check
+            val ab = _playbackState.value.abRepeat
+            if (ab.isEnabled && ab.pointA != null && ab.pointB != null && ab.pointB > ab.pointA) {
+                if (pos >= ab.pointB) {
+                    seekTo(ab.pointA)
+                }
+            }
+
             // Wow & Flutter analog tape pitch modulation
             val isWowFlutter = effectsManager.tapeDegradation.value.wowFlutterEnabled
             if (isWowFlutter) {
@@ -204,12 +227,20 @@ class ReplayAudioEngine(
     // Playback controls
     fun playTrack(track: Track, queue: List<Track> = listOf(track)) {
         val qIndex = queue.indexOfFirst { it.id == track.id }.let { if (it >= 0) it else 0 }
+        
+        // Apply per-song volume offset to AudioEffectsManager
+        effectsManager.setPerSongGainOffset(track.volumeGainOffsetDb)
+        val updatedDiag = _playbackState.value.audioDiagnostics.copy(
+            perSongGainOffsetDb = track.volumeGainOffsetDb
+        )
+
         _playbackState.value = _playbackState.value.copy(
             currentTrack = track,
             queue = queue,
             queueIndex = qIndex,
             positionMs = 0L,
-            durationMs = track.durationMs
+            durationMs = track.durationMs,
+            audioDiagnostics = updatedDiag
         )
 
         loadMediaToPlayer(mainPlayer, track.contentUri)
@@ -331,6 +362,196 @@ class ReplayAudioEngine(
         val clamped = speed.coerceIn(0.5f, 2.0f)
         mainPlayer.playbackParameters = PlaybackParameters(clamped)
         _playbackState.value = _playbackState.value.copy(playbackSpeed = clamped)
+    }
+
+    // AB REPEAT CONTROL
+    fun setAbPointA(posMs: Long = mainPlayer.currentPosition) {
+        val curAb = _playbackState.value.abRepeat
+        _playbackState.value = _playbackState.value.copy(
+            abRepeat = curAb.copy(isEnabled = true, pointA = posMs)
+        )
+    }
+
+    fun setAbPointB(posMs: Long = mainPlayer.currentPosition) {
+        val curAb = _playbackState.value.abRepeat
+        val finalPointB = if (curAb.pointA != null && posMs <= curAb.pointA) curAb.pointA + 1000L else posMs
+        _playbackState.value = _playbackState.value.copy(
+            abRepeat = curAb.copy(isEnabled = true, pointB = finalPointB)
+        )
+    }
+
+    fun clearAbRepeat() {
+        _playbackState.value = _playbackState.value.copy(
+            abRepeat = com.example.model.AbRepeatState(isEnabled = false, pointA = null, pointB = null)
+        )
+    }
+
+    // SLEEP TIMER WITH GENTLE 30-SECOND FADEOUT
+    fun startSleepTimer(minutes: Int) {
+        cancelSleepTimer()
+        val totalSec = minutes * 60
+        _playbackState.value = _playbackState.value.copy(
+            sleepTimer = com.example.model.SleepTimerState(
+                isRunning = true,
+                totalMinutes = minutes,
+                remainingSeconds = totalSec,
+                fadeoutActive = false
+            )
+        )
+
+        sleepTimerJob = scope.launch {
+            var rem = totalSec
+            val initialVol = mainPlayer.volume
+            while (rem > 0 && isActive) {
+                delay(1000L)
+                rem--
+                val isFade = rem <= 30
+                if (isFade) {
+                    val fadeFrac = (rem.toFloat() / 30f).coerceIn(0f, 1f)
+                    mainPlayer.volume = initialVol * fadeFrac
+                }
+                _playbackState.value = _playbackState.value.copy(
+                    sleepTimer = _playbackState.value.sleepTimer.copy(
+                        remainingSeconds = rem,
+                        fadeoutActive = isFade
+                    )
+                )
+            }
+            if (rem <= 0) {
+                stop()
+                mainPlayer.volume = initialVol
+                _playbackState.value = _playbackState.value.copy(
+                    sleepTimer = com.example.model.SleepTimerState(isRunning = false, remainingSeconds = 0)
+                )
+            }
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        _playbackState.value = _playbackState.value.copy(
+            sleepTimer = com.example.model.SleepTimerState(isRunning = false, remainingSeconds = 0)
+        )
+    }
+
+    // CROSSFADE DURATION (0, 2, 4, 8, 12 seconds)
+    fun setCrossfadeDuration(sec: Int) {
+        _playbackState.value = _playbackState.value.copy(
+            crossfadeDurationSec = sec.coerceIn(0, 15)
+        )
+    }
+
+    // DJ HOT CUES (1 to 4)
+    fun setHotCue(cueIndex: Int, posMs: Long = mainPlayer.currentPosition) {
+        val current = _hotCues.value.toMutableMap()
+        current[cueIndex] = posMs
+        _hotCues.value = current
+    }
+
+    fun jumpToHotCue(cueIndex: Int) {
+        val target = _hotCues.value[cueIndex] ?: return
+        seekTo(target)
+    }
+
+    // DJ PITCH BEND NUDGE (+/- 4% momentary nudge)
+    fun nudgePitch(deltaPercent: Float) {
+        val currentSpeed = _playbackState.value.playbackSpeed
+        val nudgedSpeed = (currentSpeed + deltaPercent / 100f).coerceIn(0.5f, 2.0f)
+        mainPlayer.playbackParameters = PlaybackParameters(nudgedSpeed)
+        scope.launch {
+            delay(250)
+            mainPlayer.playbackParameters = PlaybackParameters(currentSpeed)
+        }
+    }
+
+    // TAP TEMPO BPM DETECTOR
+    fun tapTempo() {
+        val now = System.currentTimeMillis()
+        tapTimestamps.add(now)
+        if (tapTimestamps.size > 8) {
+            tapTimestamps.removeAt(0)
+        }
+        if (tapTimestamps.size >= 2) {
+            val intervals = mutableListOf<Long>()
+            for (i in 1 until tapTimestamps.size) {
+                val diff = tapTimestamps[i] - tapTimestamps[i - 1]
+                if (diff in 200..2000) {
+                    intervals.add(diff)
+                }
+            }
+            if (intervals.isNotEmpty()) {
+                val avgDiffMs = intervals.average()
+                val calculatedBpm = (60000.0 / avgDiffMs).toInt().coerceIn(60, 220)
+                _detectedBpm.value = calculatedBpm
+            }
+        }
+    }
+
+    // VINTAGE MPC SAMPLER SOUND GENERATOR (Zero dependencies, pure offline audio synthesis)
+    fun triggerSamplerSound(soundType: String) {
+        scope.launch(Dispatchers.Default) {
+            try {
+                val sampleRate = 22050
+                val durationSec = when (soundType) {
+                    "AIRHORN" -> 0.45f
+                    "VINYL_BRAKE" -> 0.50f
+                    "TR808_SNARE" -> 0.25f
+                    "TAPE_REWIND" -> 0.35f
+                    else -> 0.20f
+                }
+                val numSamples = (sampleRate * durationSec).toInt()
+                val buffer = ShortArray(numSamples)
+                val random = java.util.Random()
+
+                for (i in 0 until numSamples) {
+                    val t = i.toDouble() / sampleRate
+                    val sampleValue: Double = when (soundType) {
+                        "AIRHORN" -> {
+                            val env = if (t < 0.05) t / 0.05 else (1.0 - (t - 0.05) / 0.40).coerceAtLeast(0.0)
+                            val tone1 = sin(2.0 * PI * 680.0 * t)
+                            val tone2 = sin(2.0 * PI * 850.0 * t)
+                            (tone1 * 0.5 + tone2 * 0.5) * env
+                        }
+                        "VINYL_BRAKE" -> {
+                            val freq = (600.0 * (1.0 - (t / durationSec))).coerceAtLeast(40.0)
+                            val env = (1.0 - (t / durationSec)).coerceAtLeast(0.0)
+                            sin(2.0 * PI * freq * t) * env
+                        }
+                        "TR808_SNARE" -> {
+                            val env = (1.0 - t / durationSec).coerceAtLeast(0.0)
+                            val tone = sin(2.0 * PI * 180.0 * t) * env * 0.4
+                            val noise = (random.nextDouble() * 2.0 - 1.0) * env * 0.6
+                            tone + noise
+                        }
+                        "TAPE_REWIND" -> {
+                            val freq = 1200.0 + 800.0 * sin(2.0 * PI * 15.0 * t)
+                            val noise = (random.nextDouble() * 0.4 - 0.2)
+                            val env = (1.0 - t / durationSec).coerceAtLeast(0.0)
+                            (sin(2.0 * PI * freq * t) * 0.7 + noise) * env
+                        }
+                        else -> sin(2.0 * PI * 440.0 * t) * (1.0 - t / durationSec).coerceAtLeast(0.0)
+                    }
+                    buffer[i] = (sampleValue.coerceIn(-1.0, 1.0) * 30000).toInt().toShort()
+                }
+
+                @Suppress("DEPRECATION")
+                val audioTrack = android.media.AudioTrack(
+                    android.media.AudioManager.STREAM_MUSIC,
+                    sampleRate,
+                    android.media.AudioFormat.CHANNEL_OUT_MONO,
+                    android.media.AudioFormat.ENCODING_PCM_16BIT,
+                    buffer.size * 2,
+                    android.media.AudioTrack.MODE_STATIC
+                )
+                audioTrack.write(buffer, 0, buffer.size)
+                audioTrack.play()
+                delay((durationSec * 1000).toLong() + 60L)
+                audioTrack.release()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error playing sampler sound $soundType", e)
+            }
+        }
     }
 
     private fun onTrackEnded() {

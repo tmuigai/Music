@@ -1,24 +1,35 @@
 package com.example.model
 
-enum class HardwareNavScreen(val title: String, val code: String) {
-    CONTROL_DECK("CONTROL DECK", "01"),
-    CASSETTE("CASSETTE DECK", "02"),
-    DISCMAN("PORTABLE CD", "03"),
-    DJ_DECK("DJ MIXER", "04"),
-    LYRICS_ROOM("LYRICS ROOM", "05"),
-    MIXTAPE_LIBRARY("MIXTAPE VAULT", "06"),
-    SOUND_LAB("SOUND LAB", "07"),
-    WORKSHOP("CUSTOM WORKSHOP", "08"),
-    VIRTUAL_ROOM("COLLECTION ROOM", "09"),
-    RECORDING_BOOTH("RECORDING BOOTH", "10"),
-    RADIO_MODE("FM TUNER", "11"),
-    DISCOVERY_MACHINE("DISCOVERY", "12"),
-    OBSESSION_MODE("OBSESSION", "13"),
-    MUSIC_DIARY("STATISTICS & DIARY", "14"),
-    MINIDISC("MINIDISC DECK", "15"),
-    BOOMBOX("GHETTOBLASTER", "16"),
-    VINYL("TURNTABLE DECK", "17"),
-    FOUR_TRACK("PORTASTUDIO 4-TRK", "18")
+enum class HardwareNavCategory(val title: String, val code: String) {
+    HOME("HOME", "01"),
+    MACHINES("MACHINES", "02"),
+    LIBRARY("LIBRARY", "03"),
+    SOUND("SOUND", "04"),
+    WORKSHOP("WORKSHOP", "05")
+}
+
+enum class HardwareNavScreen(val title: String, val code: String, val category: HardwareNavCategory) {
+    CONTROL_DECK("CONTROL DECK", "01", HardwareNavCategory.HOME),
+    CASSETTE("CASSETTE DECK", "02", HardwareNavCategory.MACHINES),
+    DISCMAN("PORTABLE CD", "03", HardwareNavCategory.MACHINES),
+    DJ_DECK("DJ MIXER", "04", HardwareNavCategory.MACHINES),
+    LYRICS_ROOM("LYRICS ROOM", "05", HardwareNavCategory.SOUND),
+    MIXTAPE_LIBRARY("LIBRARY CRATE", "06", HardwareNavCategory.LIBRARY),
+    SOUND_LAB("SOUND LAB", "07", HardwareNavCategory.SOUND),
+    WORKSHOP("CUSTOM WORKSHOP", "08", HardwareNavCategory.WORKSHOP),
+    VIRTUAL_ROOM("COLLECTION ROOM", "09", HardwareNavCategory.WORKSHOP),
+    RECORDING_BOOTH("RECORDING BOOTH", "10", HardwareNavCategory.SOUND),
+    RADIO_MODE("FM TUNER", "11", HardwareNavCategory.WORKSHOP),
+    DISCOVERY_MACHINE("DISCOVERY", "12", HardwareNavCategory.SOUND),
+    OBSESSION_MODE("OBSESSION", "13", HardwareNavCategory.WORKSHOP),
+    MUSIC_DIARY("STATISTICS & DIARY", "14", HardwareNavCategory.WORKSHOP),
+    MINIDISC("MINIDISC DECK", "15", HardwareNavCategory.MACHINES),
+    BOOMBOX("GHETTOBLASTER", "16", HardwareNavCategory.MACHINES),
+    VINYL("TURNTABLE DECK", "17", HardwareNavCategory.MACHINES),
+    FOUR_TRACK("PORTASTUDIO 4-TRK", "18", HardwareNavCategory.MACHINES),
+    ROTARY_PHONE("ROTARY PHONE", "19", HardwareNavCategory.MACHINES),
+    PARTY_JUKEBOX("PARTY JUKEBOX", "20", HardwareNavCategory.MACHINES),
+    BUILD_A_MACHINE("BUILD-A-MACHINE", "21", HardwareNavCategory.WORKSHOP)
 }
 
 data class Track(
@@ -36,7 +47,100 @@ data class Track(
     val replayCount: Int = 0,
     val lastPlayedMs: Long = 0,
     val isFavorite: Boolean = false,
-    val lyrics: String? = null
+    val lyrics: String? = null,
+    val volumeGainOffsetDb: Float = 0.0f
+)
+
+data class ScanProgress(
+    val isScanning: Boolean = false,
+    val totalFound: Int = 0,
+    val newlyAdded: Int = 0,
+    val currentFileName: String = "",
+    val formatsDetected: Set<String> = emptySet(),
+    val statusMessage: String = "SCANNER READY",
+    val progressPercent: Float = 0f,
+    val isIncremental: Boolean = false
+)
+
+data class FolderEntry(
+    val fullPath: String,
+    val displayName: String,
+    val isDirectory: Boolean,
+    val trackCount: Int = 0,
+    val subFolderCount: Int = 0,
+    val sampleTrack: Track? = null
+)
+
+enum class CuratedCategory(val title: String, val badge: String, val description: String) {
+    RECENTLY_ADDED("RECENTLY ADDED", "NEW CRATE", "Freshly acquired & indexed tracks"),
+    RECENTLY_PLAYED("RECENTLY PLAYED", "SESSIONS", "Recently loaded on decks"),
+    MOST_PLAYED("MOST PLAYED", "ROTATION", "Most spun records in archive"),
+    FAVOURITES("FAVOURITES", "GOLD STARS", "Starred essential listening"),
+    FORGOTTEN_TRACKS("FORGOTTEN TRACKS", "UNTOUCHED", "Dusty gems unplayed in 90+ days"),
+    LOSSLESS_AUDIO("LOSSLESS MASTERS", "STUDIO GRADE", "Audiophile FLAC, WAV & AIFF"),
+    EXTENDED_CUTS("EXTENDED 12\"", "LONG PLAYS", "Tracks over 5 minutes duration"),
+    INTERLUDES("INTERLUDES", "SHORT CUTS", "Brief skits & intros under 2 minutes")
+}
+
+fun detectAudioFormat(path: String?, mimeType: String? = null): String {
+    val ext = path?.substringAfterLast('.', "")?.uppercase() ?: ""
+    return when (ext) {
+        "MP3" -> "MP3"
+        "FLAC" -> "FLAC"
+        "WAV", "WAVE" -> "WAV"
+        "AAC" -> "AAC"
+        "M4A", "M4B", "M4P" -> "M4A"
+        "OGG", "OGA" -> "OGG"
+        "OPUS" -> "OPUS"
+        "AIFF", "AIF" -> "AIFF"
+        "WMA" -> "WMA"
+        else -> {
+            when {
+                mimeType?.contains("flac", ignoreCase = true) == true -> "FLAC"
+                mimeType?.contains("wav", ignoreCase = true) == true -> "WAV"
+                mimeType?.contains("opus", ignoreCase = true) == true -> "OPUS"
+                mimeType?.contains("ogg", ignoreCase = true) == true -> "OGG"
+                mimeType?.contains("aac", ignoreCase = true) == true -> "AAC"
+                mimeType?.contains("mp4", ignoreCase = true) == true || mimeType?.contains("m4a", ignoreCase = true) == true -> "M4A"
+                mimeType?.contains("mpeg", ignoreCase = true) == true || mimeType?.contains("mp3", ignoreCase = true) == true -> "MP3"
+                else -> if (ext.isNotBlank() && ext.length in 2..4) ext else "AUDIO"
+            }
+        }
+    }
+}
+
+fun parseGenres(rawGenre: String?): List<String> {
+    if (rawGenre.isNullOrBlank() || rawGenre.equals("Unknown", ignoreCase = true) || rawGenre.equals("Local Audio", ignoreCase = true)) {
+        return listOf("Underground")
+    }
+    val split = rawGenre.split(Regex("[/,;|&•+]"))
+        .map { it.trim() }
+        .filter { it.isNotBlank() && it.length > 1 }
+    return if (split.isEmpty()) listOf(rawGenre.trim()) else split
+}
+
+val Track.genreList: List<String> get() = parseGenres(genre)
+val Track.audioFormat: String get() = detectAudioFormat(path)
+
+data class DuplicateGroup(
+    val id: String,
+    val title: String,
+    val artist: String,
+    val reason: String,
+    val recommendedKeep: Track,
+    val duplicateTracks: List<Track>
+)
+
+data class LibraryHealthReport(
+    val totalTracks: Int = 0,
+    val duplicateGroups: List<DuplicateGroup> = emptyList(),
+    val missingFiles: List<Track> = emptyList(),
+    val missingArtworkCount: Int = 0,
+    val missingMetadataCount: Int = 0,
+    val losslessCount: Int = 0,
+    val totalDurationMs: Long = 0L,
+    val healthScore: Int = 100,
+    val isScanning: Boolean = false
 )
 
 enum class RepeatMode {
@@ -85,6 +189,77 @@ data class MiniDiscCartridge(
     val isShutterOpen: Boolean = false
 )
 
+data class AbRepeatState(
+    val isEnabled: Boolean = false,
+    val pointA: Long? = null,
+    val pointB: Long? = null
+)
+
+data class SleepTimerState(
+    val isRunning: Boolean = false,
+    val totalMinutes: Int = 0,
+    val remainingSeconds: Int = 0,
+    val fadeoutActive: Boolean = false
+)
+
+data class AudioDiagnostics(
+    val codec: String = "PCM / 16-Bit FLAC/MP3",
+    val sampleRateKhz: Float = 44.1f,
+    val bitDepth: Int = 16,
+    val channels: String = "Stereo 2.0 (L/R)",
+    val bufferHealthPercent: Int = 100,
+    val dspPipeline: String = "ExoPlayer -> 10-Band EQ -> Preamp -> LoudnessEnhancer -> Limiter",
+    val activeOutput: String = "High Definition Audio Route",
+    val perSongGainOffsetDb: Float = 0.0f
+)
+
+enum class ListeningEnvironment(
+    val title: String,
+    val code: String,
+    val description: String,
+    val ampBoostPercent: Int,
+    val bassBoostStrength: Int,
+    val tapeHissEnabled: Boolean,
+    val eqPreset: String
+) {
+    BEDROOM("BEDROOM", "ENV-01", "Warm, mellow tape hiss & soft low end", 95, 300, true, "Tape Cassette Warmth"),
+    NIGHT_DRIVE("NIGHT DRIVE", "ENV-02", "Deep bass & punchy presence for motion", 130, 750, false, "Underground Bass"),
+    HEADPHONES("HEADPHONES", "ENV-03", "Precision stereo imaging & high definition", 110, 450, false, "Discman Crystal"),
+    STUDIO("STUDIO", "ENV-04", "Flat reference response, zero coloration", 100, 0, false, "Flat"),
+    PARTY("PARTY", "ENV-05", "Max loudness amplification & 3D surround sound", 160, 900, false, "90s Rave Club"),
+    QUIET_LISTENING("QUIET", "ENV-06", "Gentle acoustic curve & subtle dynamics", 85, 200, false, "Studio Reference")
+}
+
+enum class SmartFolderType(
+    val title: String,
+    val subtitle: String,
+    val ruleCode: String
+) {
+    PRE_2000("PRE-2000 ARCHIVE", "Tracks released before year 2000", "RULE_YEAR_LT_2000"),
+    DEEP_CUTS("DEEP CUTS (> 5 MIN)", "Extended club mixes & epics", "RULE_DUR_GT_5MIN"),
+    NEGLECTED("UNPLAYED 90+ DAYS", "Rediscover forgotten crate gems", "RULE_LAST_PLAYED_90D"),
+    LOSSLESS("LOSSLESS / HI-RES", "FLAC, WAV & high-fidelity audio", "RULE_FORMAT_LOSSLESS"),
+    HEAVY_ROTATION("HEAVY ROTATION", "Most spun tracks (> 5 plays)", "RULE_REPLAY_GT_5"),
+    MISSING_TAGS("METADATA DEFECTS", "Missing artwork or album tags", "RULE_MISSING_METADATA"),
+    KENYA_ROOTS("KENYA & AFRO GROOVES", "East African & Afro underground", "RULE_GENRE_AFRO")
+}
+
+enum class LibraryViewMode {
+    LIST, GRID, WALL
+}
+
+data class HotCue(
+    val cueIndex: Int,
+    val timestampMs: Long,
+    val label: String
+)
+
+data class CustomMachineSlot(
+    val slotIndex: Int,
+    val moduleName: String,
+    val icon: String
+)
+
 data class PlaybackState(
     val currentTrack: Track? = null,
     val isPlaying: Boolean = false,
@@ -101,7 +276,12 @@ data class PlaybackState(
     val cdRotationAngle: Float = 0.0f,
     val antiSkipBufferPercent: Float = 1.0f,
     val isCassetteInserted: Boolean = true,
-    val activeDeckMode: HardwareNavScreen = HardwareNavScreen.CONTROL_DECK
+    val activeDeckMode: HardwareNavScreen = HardwareNavScreen.CONTROL_DECK,
+    val crossfadeDurationSec: Int = 0, // 0, 2, 4, 8, 12 sec
+    val abRepeat: AbRepeatState = AbRepeatState(),
+    val sleepTimer: SleepTimerState = SleepTimerState(),
+    val audioDiagnostics: AudioDiagnostics = AudioDiagnostics(),
+    val currentEnvironment: ListeningEnvironment = ListeningEnvironment.HEADPHONES
 )
 
 enum class TapeSide {
@@ -174,16 +354,25 @@ data class LyricsLine(
 
 data class EqualizerState(
     val isEnabled: Boolean = true,
+    val is10BandMode: Boolean = true,
     val bands: Map<Int, Int> = mapOf(
-        0 to 3,   // 60 Hz Bass
-        1 to 2,   // 230 Hz Low Mid
-        2 to 0,   // 910 Hz Mid
-        3 to 4,   // 3 kHz Presence
-        4 to 5    // 14 kHz Air
+        0 to 4,   // 31 Hz Sub-bass
+        1 to 3,   // 62 Hz Bass
+        2 to 2,   // 125 Hz Upper bass
+        3 to 1,   // 250 Hz Low mid
+        4 to 0,   // 500 Hz Mid
+        5 to 2,   // 1 kHz Center mid
+        6 to 3,   // 2 kHz Upper mid
+        7 to 4,   // 4 kHz Presence
+        8 to 5,   // 8 kHz Brilliance
+        9 to 4    // 16 kHz Air
     ),
     val bassBoost: Int = 600, // 0 to 1000
     val virtualizer: Int = 450, // 0 to 1000
-    val presetName: String = "Studio Reference"
+    val presetName: String = "Studio Reference",
+    val parametricFreqHz: Float = 1000f,
+    val parametricBandwidthQ: Float = 1.4f,
+    val parametricGainDb: Float = 0.0f
 )
 
 enum class HardwareMaterial(val label: String, val baseColorHex: String, val borderColorHex: String) {

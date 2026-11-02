@@ -62,6 +62,12 @@ fun DjDeckScreen(
     onSetEq: (Boolean, String, Float) -> Unit,
     onSelectTrackA: (Track) -> Unit,
     onSelectTrackB: (Track) -> Unit,
+    onTriggerSampler: (String) -> Unit = {},
+    onSetHotCue: (Int) -> Unit = {},
+    onJumpHotCue: (Int) -> Unit = {},
+    onPitchNudge: (Float) -> Unit = {},
+    onTapTempo: () -> Unit = {},
+    detectedBpm: Int = 128,
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
@@ -254,6 +260,213 @@ fun DjDeckScreen(
                             Slider(value = djState.eqMidB, onValueChange = { onSetEq(false, "mid", it) }, valueRange = -12f..12f)
                             Text(text = "HIGH B", fontFamily = ShareTechMonoFont, fontSize = 9.sp, color = TextMuted)
                             Slider(value = djState.eqHighB, onValueChange = { onSetEq(false, "high", it) }, valueRange = -12f..12f)
+                        }
+                    }
+                }
+            }
+        }
+
+        // HOT CUES & PITCH BEND NUDGE & TAP TEMPO
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(GunmetalDark)
+                    .border(1.dp, BorderHardware, RoundedCornerShape(3.dp))
+                    .padding(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "HOT CUES // PITCH NUDGE // BPM",
+                        fontFamily = ChakraPetchFont,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = BurntOrange
+                    )
+
+                    // Tap tempo button with live BPM readout
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .background(GunmetalMedium)
+                                .border(1.dp, AcidGreen, RoundedCornerShape(2.dp))
+                                .clickable {
+                                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    onTapTempo()
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "TAP BPM: $detectedBpm",
+                                fontFamily = ShareTechMonoFont,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                color = AcidGreen
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // CUE 1-4 Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    (1..4).forEach { cueIdx ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(GunmetalLight)
+                                .border(1.dp, ElectricBlue)
+                                .clickable {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    onJumpHotCue(cueIdx)
+                                }
+                                .padding(2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "CUE $cueIdx",
+                                    fontFamily = ChakraPetchFont,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "JUMP",
+                                    fontFamily = ShareTechMonoFont,
+                                    fontSize = 7.sp,
+                                    color = ElectricBlue
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Momentary Pitch Bend Nudge Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(GunmetalLight)
+                            .border(1.dp, BorderHardware)
+                            .clickable {
+                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                onPitchNudge(-4.0f)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "◀ NUDGE -4%",
+                            fontFamily = ShareTechMonoFont,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = TextPrimary
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(GunmetalLight)
+                            .border(1.dp, BorderHardware)
+                            .clickable {
+                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                onPitchNudge(4.0f)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "NUDGE +4% ▶",
+                            fontFamily = ShareTechMonoFont,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = TextPrimary
+                        )
+                    }
+                }
+            }
+        }
+
+        // 4 MPC-STYLE RETRO SAMPLER PADS
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(GunmetalDark)
+                    .border(1.dp, BorderHardware, RoundedCornerShape(3.dp))
+                    .padding(10.dp)
+            ) {
+                Text(
+                    text = "MPC DRUM & FX SAMPLER // 16-BIT RETRO TRIGGERS",
+                    fontFamily = ChakraPetchFont,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = AcidGreen
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val pads = listOf(
+                        "AIRHORN" to "AIRHORN",
+                        "VINYL_BRAKE" to "BRAKE",
+                        "TR808_SNARE" to "TR-808",
+                        "TAPE_REWIND" to "REWIND"
+                    )
+
+                    pads.forEach { (sndType, label) ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(54.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF2B2E33))
+                                .border(1.5.dp, BurntOrange, RoundedCornerShape(4.dp))
+                                .clickable {
+                                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                    onTriggerSampler(sndType)
+                                }
+                                .padding(4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = label,
+                                    fontFamily = ChakraPetchFont,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    color = TextPrimary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "PAD",
+                                    fontFamily = ShareTechMonoFont,
+                                    fontSize = 7.sp,
+                                    color = BurntOrange
+                                )
+                            }
                         }
                     }
                 }

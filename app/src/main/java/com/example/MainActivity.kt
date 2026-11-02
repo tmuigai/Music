@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.model.HardwareNavCategory
 import com.example.model.HardwareNavScreen
 import com.example.ui.ReplayViewModel
 import com.example.ui.components.HardwareHeader
@@ -42,9 +43,12 @@ import com.example.ui.screens.MusicDiaryScreen
 import com.example.ui.screens.ObsessionModeScreen
 import com.example.ui.screens.RadioModeScreen
 import com.example.ui.screens.RecordingBoothScreen
-import com.example.ui.screens.SoundLaboratoryScreen
-import com.example.ui.screens.VinylPlayerScreen
+import com.example.ui.screens.BuildAMachineScreen
 import com.example.ui.screens.FourTrackRecorderScreen
+import com.example.ui.screens.JukeboxScreen
+import com.example.ui.screens.SoundLaboratoryScreen
+import com.example.ui.screens.TelephoneScreen
+import com.example.ui.screens.VinylPlayerScreen
 import com.example.ui.screens.VirtualRoomScreen
 import com.example.ui.screens.WorkshopScreen
 import com.example.ui.theme.MatteBlack
@@ -106,15 +110,34 @@ fun ReplayApp(viewModel: ReplayViewModel) {
     val recordingAmplitude by viewModel.recordingAmplitude.collectAsStateWithLifecycle()
     val vinylState by viewModel.vinylState.collectAsStateWithLifecycle()
     val fourTrackState by viewModel.fourTrackState.collectAsStateWithLifecycle()
+    val libraryCategory by viewModel.libraryCategory.collectAsStateWithLifecycle()
+    val soundLabSection by viewModel.soundLabSection.collectAsStateWithLifecycle()
+    val currentEnvironment by viewModel.currentEnvironment.collectAsStateWithLifecycle()
+    val scanProgress by viewModel.scanProgress.collectAsStateWithLifecycle()
+    val currentFolderPath by viewModel.currentFolderPath.collectAsStateWithLifecycle()
+    val selectedCuratedCategory by viewModel.selectedCuratedCategory.collectAsStateWithLifecycle()
+    val selectedGenre by viewModel.selectedGenre.collectAsStateWithLifecycle()
+    val libraryHealthReport by viewModel.libraryHealthReport.collectAsStateWithLifecycle()
+    val isBulkMode by viewModel.isBulkMode.collectAsStateWithLifecycle()
+    val selectedTrackIds by viewModel.selectedTrackIds.collectAsStateWithLifecycle()
 
     val accentColor = Color(android.graphics.Color.parseColor(skin.accentColorHex))
 
-    // SAF Audio File Picker
+    // SAF Audio File Picker (Multi-files)
     val audioPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         if (uris.isNotEmpty()) {
             viewModel.importAudioFiles(uris)
+        }
+    }
+
+    // SAF Folder Tree Picker
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importFolder(uri)
         }
     }
 
@@ -161,11 +184,16 @@ fun ReplayApp(viewModel: ReplayViewModel) {
                 onEjectClick = { viewModel.ejectCassette() }
             )
 
-            // Mode Rack Selector (8 primary modes + expansion bays)
+            // 5 Primary Hubs + Mechanical Sub-Selector Rack
             HardwareNavRack(
                 currentScreen = currentScreen,
                 accentColor = accentColor,
-                onNavigate = { viewModel.navigateTo(it) }
+                onNavigateCategory = { viewModel.navigateToCategory(it) },
+                onNavigateScreen = { viewModel.navigateTo(it) },
+                selectedLibraryTab = libraryCategory,
+                onSelectLibraryTab = { viewModel.setLibraryCategory(it) },
+                selectedSoundTab = soundLabSection,
+                onSelectSoundTab = { viewModel.setSoundLabSection(it) }
             )
 
             // Active Screen Destination
@@ -199,7 +227,9 @@ fun ReplayApp(viewModel: ReplayViewModel) {
                             onRescanLibrary = { viewModel.refreshLibrary() },
                             onTriggerFilePicker = { audioPickerLauncher.launch(arrayOf("audio/*")) },
                             onEjectCassette = { viewModel.ejectCassette() },
-                            onInsertCassette = { viewModel.insertCassette() }
+                            onInsertCassette = { viewModel.insertCassette() },
+                            currentEnvironment = currentEnvironment,
+                            onApplyEnvironment = { viewModel.applyListeningEnvironment(it) }
                         )
                     }
                     HardwareNavScreen.CASSETTE -> {
@@ -249,7 +279,13 @@ fun ReplayApp(viewModel: ReplayViewModel) {
                             onScratchB = { viewModel.scratchDeckB(it) },
                             onSetEq = { isA, band, v -> viewModel.setDjEq(isA, band, v) },
                             onSelectTrackA = { viewModel.setDjTrackA(it) },
-                            onSelectTrackB = { viewModel.setDjTrackB(it) }
+                            onSelectTrackB = { viewModel.setDjTrackB(it) },
+                            onTriggerSampler = { viewModel.triggerSamplerSound(it) },
+                            onSetHotCue = { viewModel.setHotCue(it) },
+                            onJumpHotCue = { viewModel.jumpToHotCue(it) },
+                            onPitchNudge = { viewModel.nudgePitch(it) },
+                            onTapTempo = { viewModel.tapTempo() },
+                            detectedBpm = viewModel.audioEngine.detectedBpm.collectAsStateWithLifecycle().value
                         )
                     }
                     HardwareNavScreen.LYRICS_ROOM -> {
@@ -274,8 +310,43 @@ fun ReplayApp(viewModel: ReplayViewModel) {
                             onCreateMixtape = { title, label, notes, shell, reel, transp, sA, sB, dur ->
                                 viewModel.createMixtape(title, label, notes, shell, reel, transp, sA, sB, dur)
                             },
-                            onRescanLibrary = { viewModel.refreshLibrary() },
-                            onTriggerFilePicker = { audioPickerLauncher.launch(arrayOf("audio/*")) }
+                            onRescanLibrary = { viewModel.refreshLibrary(isIncremental = false) },
+                            onTriggerFilePicker = { audioPickerLauncher.launch(arrayOf("audio/*")) },
+                            selectedCategory = libraryCategory,
+                            onCategorySelect = { viewModel.setLibraryCategory(it) },
+                            favoriteTracks = favoriteTracks,
+                            selectedSmartFolder = viewModel.selectedSmartFolder.collectAsStateWithLifecycle().value,
+                            onSelectSmartFolder = { viewModel.selectSmartFolder(it) },
+                            libraryViewMode = viewModel.libraryViewMode.collectAsStateWithLifecycle().value,
+                            onSelectViewMode = { viewModel.setLibraryViewMode(it) },
+                            onSetTrackGain = { id, gain -> viewModel.setPerSongGain(id, gain) },
+                            scanProgress = scanProgress,
+                            onIncrementalScan = { viewModel.refreshLibrary(isIncremental = true) },
+                            onTriggerFolderPicker = { folderPickerLauncher.launch(null) },
+                            currentFolderPath = currentFolderPath,
+                            onOpenFolder = { viewModel.openFolder(it) },
+                            onNavigateUpFolder = { viewModel.navigateUpFolder() },
+                            onPlayFolder = { viewModel.playFolder(it) },
+                            selectedCuratedCategory = selectedCuratedCategory,
+                            onSelectCuratedCategory = { viewModel.selectCuratedCategory(it) },
+                            onPlayCuratedCategory = { viewModel.playCategory(it) },
+                            selectedGenre = selectedGenre,
+                            onSelectGenre = { viewModel.selectGenre(it) },
+                            onPlayGenre = { viewModel.playGenre(it) },
+                            libraryHealthReport = libraryHealthReport,
+                            onRunDiagnostics = { viewModel.runLibraryHealthDiagnostics() },
+                            onDeduplicateAll = { viewModel.deduplicateAll() },
+                            onPurgeMissingFiles = { viewModel.purgeMissingFiles() },
+                            onAutoRepairLibrary = { viewModel.autoRepairLibrary() },
+                            isBulkMode = isBulkMode,
+                            selectedTrackIds = selectedTrackIds,
+                            onToggleBulkMode = { viewModel.toggleBulkMode() },
+                            onToggleTrackSelection = { viewModel.toggleTrackSelection(it) },
+                            onSelectAllTracks = { viewModel.selectAllTracks(it) },
+                            onClearTrackSelection = { viewModel.clearTrackSelection() },
+                            onDeleteSelectedTracks = { viewModel.deleteSelectedTracks() },
+                            onBulkUpdateMetadata = { ids, genre, year -> viewModel.bulkUpdateMetadata(ids, genre, year) },
+                            onDeleteSingleTrack = { viewModel.deleteTrack(it) }
                         )
                     }
                     HardwareNavScreen.SOUND_LAB -> {
@@ -293,7 +364,23 @@ fun ReplayApp(viewModel: ReplayViewModel) {
                             onApplyPreset = { viewModel.applyEqPreset(it) },
                             onToggleTapeHiss = { viewModel.toggleTapeHiss() },
                             onToggleWowFlutter = { viewModel.toggleWowFlutter() },
-                            onSetSaturationWarmth = { viewModel.setSaturationWarmth(it) }
+                            onSetSaturationWarmth = { viewModel.setSaturationWarmth(it) },
+                            volumeState = volumeState,
+                            onSetVolume = { viewModel.setAmplification(it) },
+                            onSetPreamp = { viewModel.setPreampGain(it) },
+                            onSetBalance = { viewModel.setBalance(it) },
+                            onToggleMute = { viewModel.toggleMute() },
+                            onSetOutputProfile = { viewModel.setOutputProfile(it) },
+                            onToggleExperimentalCeiling = { viewModel.toggleExperimentalCeiling() },
+                            selectedSection = soundLabSection,
+                            onSectionSelect = { viewModel.setSoundLabSection(it) },
+                            playbackState = playbackState,
+                            onSetCrossfade = { viewModel.setCrossfadeDuration(it) },
+                            onSetAbPointA = { viewModel.setAbPointA() },
+                            onSetAbPointB = { viewModel.setAbPointB() },
+                            onClearAb = { viewModel.clearAbRepeat() },
+                            onStartSleepTimer = { viewModel.startSleepTimer(it) },
+                            onCancelSleepTimer = { viewModel.cancelSleepTimer() }
                         )
                     }
                     HardwareNavScreen.WORKSHOP -> {
@@ -413,6 +500,15 @@ fun ReplayApp(viewModel: ReplayViewModel) {
                             onToggleRecArm = { viewModel.toggleFourTrackRecArm(it) },
                             onToggleDbx = { viewModel.toggleFourTrackDbx() }
                         )
+                    }
+                    HardwareNavScreen.ROTARY_PHONE -> {
+                        TelephoneScreen(viewModel = viewModel)
+                    }
+                    HardwareNavScreen.PARTY_JUKEBOX -> {
+                        JukeboxScreen(viewModel = viewModel)
+                    }
+                    HardwareNavScreen.BUILD_A_MACHINE -> {
+                        BuildAMachineScreen(viewModel = viewModel)
                     }
                 }
             }

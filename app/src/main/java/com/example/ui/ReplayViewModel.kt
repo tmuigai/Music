@@ -12,19 +12,30 @@ import com.example.data.ObsessionProfileEntity
 import com.example.data.RadioPresetEntity
 import com.example.data.RecordingEntity
 import com.example.data.TrackBookmarkEntity
+import com.example.model.CuratedCategory
+import com.example.model.CustomMachineSlot
+import com.example.model.DuplicateGroup
 import com.example.model.EqualizerState
 import com.example.model.HardwareMaterial
+import com.example.model.HardwareNavCategory
 import com.example.model.HardwareNavScreen
 import com.example.model.HardwareSkin
+import com.example.model.LibraryHealthReport
+import com.example.model.LibraryViewMode
+import com.example.model.ListeningEnvironment
 import com.example.model.LyricsLine
 import com.example.model.MasterVolumeState
 import com.example.model.MiniDiscCartridge
 import com.example.model.OutputProfile
 import com.example.model.PlaybackState
+import com.example.model.ScanProgress
+import com.example.model.SmartFolderType
 import com.example.model.StickerItem
 import com.example.model.TapeDegradationState
 import com.example.model.TapeSide
 import com.example.model.Track
+import com.example.model.audioFormat
+import com.example.model.genreList
 import com.example.playback.LrcParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -46,6 +57,13 @@ class ReplayViewModel(application: Application) : AndroidViewModel(application) 
     // Navigation State
     private val _currentScreen = MutableStateFlow(HardwareNavScreen.CONTROL_DECK)
     val currentScreen: StateFlow<HardwareNavScreen> = _currentScreen.asStateFlow()
+
+    // Sub-category state for Library and Sound Lab
+    private val _libraryCategory = MutableStateFlow("SONGS")
+    val libraryCategory: StateFlow<String> = _libraryCategory.asStateFlow()
+
+    private val _soundLabSection = MutableStateFlow("EQ")
+    val soundLabSection: StateFlow<String> = _soundLabSection.asStateFlow()
 
     private val screenBackStack = mutableListOf<HardwareNavScreen>()
 
@@ -97,6 +115,64 @@ class ReplayViewModel(application: Application) : AndroidViewModel(application) 
     // UI Feedback Message (e.g., "Cassette Ejected", "Skin Profile Saved", "Radio Locked")
     private val _hudMessage = MutableStateFlow<String?>(null)
     val hudMessage: StateFlow<String?> = _hudMessage.asStateFlow()
+
+    // Library Intelligence States
+    private val _libraryViewMode = MutableStateFlow(LibraryViewMode.LIST)
+    val libraryViewMode: StateFlow<LibraryViewMode> = _libraryViewMode.asStateFlow()
+
+    private val _selectedSmartFolder = MutableStateFlow<SmartFolderType?>(null)
+    val selectedSmartFolder: StateFlow<SmartFolderType?> = _selectedSmartFolder.asStateFlow()
+
+    // Scanner & Library Navigation States
+    val scanProgress: StateFlow<ScanProgress> = repository.scanProgress
+
+    private val _currentFolderPath = MutableStateFlow("")
+    val currentFolderPath: StateFlow<String> = _currentFolderPath.asStateFlow()
+
+    private val _selectedCuratedCategory = MutableStateFlow(CuratedCategory.RECENTLY_ADDED)
+    val selectedCuratedCategory: StateFlow<CuratedCategory> = _selectedCuratedCategory.asStateFlow()
+
+    private val _selectedGenre = MutableStateFlow<String?>(null)
+    val selectedGenre: StateFlow<String?> = _selectedGenre.asStateFlow()
+
+    // Library Diagnostics & Duplicates
+    private val _libraryHealthReport = MutableStateFlow(LibraryHealthReport())
+    val libraryHealthReport: StateFlow<LibraryHealthReport> = _libraryHealthReport.asStateFlow()
+
+    // Bulk Track Selection
+    private val _isBulkMode = MutableStateFlow(false)
+    val isBulkMode: StateFlow<Boolean> = _isBulkMode.asStateFlow()
+
+    private val _selectedTrackIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedTrackIds: StateFlow<Set<Long>> = _selectedTrackIds.asStateFlow()
+
+    // Listening Environment State
+    private val _currentEnvironment = MutableStateFlow(ListeningEnvironment.HEADPHONES)
+    val currentEnvironment: StateFlow<ListeningEnvironment> = _currentEnvironment.asStateFlow()
+
+    // Modular Build-A-Machine configuration
+    private val _customMachineSlots = MutableStateFlow(
+        listOf(
+            CustomMachineSlot(0, "CASSETTE DECK", "TAPE"),
+            CustomMachineSlot(1, "10-BAND EQ", "EQ"),
+            CustomMachineSlot(2, "CROSSFADER", "DJ")
+        )
+    )
+    val customMachineSlots: StateFlow<List<CustomMachineSlot>> = _customMachineSlots.asStateFlow()
+
+    // Rotary Telephone State
+    private val _telephoneNumber = MutableStateFlow("")
+    val telephoneNumber: StateFlow<String> = _telephoneNumber.asStateFlow()
+
+    // Party Jukebox Mode State
+    private val _jukeboxCredits = MutableStateFlow(3)
+    val jukeboxCredits: StateFlow<Int> = _jukeboxCredits.asStateFlow()
+
+    private val _jukeboxSelectionCode = MutableStateFlow("")
+    val jukeboxSelectionCode: StateFlow<String> = _jukeboxSelectionCode.asStateFlow()
+
+    private val _isPartyLockoutActive = MutableStateFlow(false)
+    val isPartyLockoutActive: StateFlow<Boolean> = _isPartyLockoutActive.asStateFlow()
 
     // Data streams from repository
     val allTracks: StateFlow<List<Track>> = repository.allTracks
@@ -168,6 +244,46 @@ class ReplayViewModel(application: Application) : AndroidViewModel(application) 
             screenBackStack.add(_currentScreen.value)
             _currentScreen.value = screen
             showHud("MODE: ${screen.title}")
+        }
+    }
+
+    fun navigateToCategory(category: HardwareNavCategory) {
+        when (category) {
+            HardwareNavCategory.HOME -> navigateTo(HardwareNavScreen.CONTROL_DECK)
+            HardwareNavCategory.MACHINES -> {
+                if (_currentScreen.value.category != HardwareNavCategory.MACHINES) {
+                    navigateTo(HardwareNavScreen.CASSETTE)
+                }
+            }
+            HardwareNavCategory.LIBRARY -> {
+                if (_currentScreen.value != HardwareNavScreen.MIXTAPE_LIBRARY) {
+                    navigateTo(HardwareNavScreen.MIXTAPE_LIBRARY)
+                }
+            }
+            HardwareNavCategory.SOUND -> {
+                if (_currentScreen.value.category != HardwareNavCategory.SOUND) {
+                    navigateTo(HardwareNavScreen.SOUND_LAB)
+                }
+            }
+            HardwareNavCategory.WORKSHOP -> {
+                if (_currentScreen.value.category != HardwareNavCategory.WORKSHOP) {
+                    navigateTo(HardwareNavScreen.WORKSHOP)
+                }
+            }
+        }
+    }
+
+    fun setLibraryCategory(category: String) {
+        _libraryCategory.value = category
+        if (_currentScreen.value != HardwareNavScreen.MIXTAPE_LIBRARY) {
+            navigateTo(HardwareNavScreen.MIXTAPE_LIBRARY)
+        }
+    }
+
+    fun setSoundLabSection(section: String) {
+        _soundLabSection.value = section
+        if (_currentScreen.value != HardwareNavScreen.SOUND_LAB) {
+            navigateTo(HardwareNavScreen.SOUND_LAB)
         }
     }
 
@@ -601,12 +717,403 @@ class ReplayViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // Library Rescan
-    fun refreshLibrary() {
-        viewModelScope.launch {
-            val count = repository.scanDeviceMusic()
-            showHud(if (count > 0) "FOUND $count AUDIO TRACK(S)" else "SCAN COMPLETED (0 TRACKS)")
+    // Library Intelligence Controls
+    fun setLibraryViewMode(mode: LibraryViewMode) {
+        _libraryViewMode.value = mode
+        showHud("CRATE VIEW: ${mode.name}")
+    }
+
+    fun selectSmartFolder(folder: SmartFolderType?) {
+        _selectedSmartFolder.value = folder
+        showHud(if (folder != null) "SMART FILTER: ${folder.title}" else "ALL AUDIO CRATE")
+    }
+
+    fun getFilteredTracks(folder: SmartFolderType?, baseTracks: List<Track>): List<Track> {
+        if (folder == null) return baseTracks
+        return when (folder) {
+            SmartFolderType.PRE_2000 -> baseTracks.filter { it.year in 1..1999 }
+            SmartFolderType.DEEP_CUTS -> baseTracks.filter { it.durationMs >= 300000L }
+            SmartFolderType.NEGLECTED -> {
+                val cutOff = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
+                baseTracks.filter { it.lastPlayedMs < cutOff }
+            }
+            SmartFolderType.LOSSLESS -> baseTracks.filter {
+                it.path.endsWith(".flac", ignoreCase = true) || it.path.endsWith(".wav", ignoreCase = true)
+            }
+            SmartFolderType.HEAVY_ROTATION -> baseTracks.filter { it.replayCount >= 5 }
+            SmartFolderType.MISSING_TAGS -> baseTracks.filter {
+                it.albumArtUri.isNullOrEmpty() || it.genre == "Unknown" || it.year == 0
+            }
+            SmartFolderType.KENYA_ROOTS -> baseTracks.filter {
+                it.genre.contains("Afro", ignoreCase = true) ||
+                it.genre.contains("Kenya", ignoreCase = true) ||
+                it.genre.contains("Benga", ignoreCase = true)
+            }
         }
+    }
+
+    fun bulkUpdateMetadata(trackIds: List<Long>, genre: String?, year: Int?) {
+        viewModelScope.launch {
+            repository.bulkUpdateMetadata(trackIds, year ?: 0, genre ?: "Underground")
+            showHud("BULK TAGGED ${trackIds.size} TRACK(S)")
+        }
+    }
+
+    // Per-Song Volume Memory
+    fun setPerSongGain(trackId: Long, gainDb: Float) {
+        viewModelScope.launch {
+            repository.updateTrackVolumeGainOffset(trackId, gainDb)
+            if (audioEngine.playbackState.value.currentTrack?.id == trackId) {
+                audioEngine.effectsManager.setPerSongGainOffset(gainDb)
+            }
+            showHud("GAIN MEMORY: ${if (gainDb >= 0) "+" else ""}${String.format("%.1f", gainDb)} dB")
+        }
+    }
+
+    // AB Repeat Loop
+    fun setAbPointA(timeMs: Long? = null) {
+        if (timeMs != null) audioEngine.setAbPointA(timeMs) else audioEngine.setAbPointA()
+        showHud("AB REPEAT: [A] MARK SET")
+    }
+
+    fun setAbPointB(timeMs: Long? = null) {
+        if (timeMs != null) audioEngine.setAbPointB(timeMs) else audioEngine.setAbPointB()
+        showHud("AB REPEAT: [B] MARK SET -> LOOP ENGAGED")
+    }
+
+    fun clearAbRepeat() {
+        audioEngine.clearAbRepeat()
+        showHud("AB REPEAT: DISENGAGED")
+    }
+
+    // Sleep Timer
+    fun startSleepTimer(minutes: Int) {
+        audioEngine.startSleepTimer(minutes)
+        showHud("SLEEP TIMER: $minutes MIN WITH FADEOUT")
+    }
+
+    fun cancelSleepTimer() {
+        audioEngine.cancelSleepTimer()
+        showHud("SLEEP TIMER: CANCELLED")
+    }
+
+    // Crossfade
+    fun setCrossfadeDuration(seconds: Int) {
+        audioEngine.setCrossfadeDuration(seconds)
+        showHud("CROSSFADE: ${seconds}s")
+    }
+
+    // Listening Environment Presets
+    fun applyListeningEnvironment(env: ListeningEnvironment) {
+        _currentEnvironment.value = env
+        audioEngine.effectsManager.applyEnvironment(env)
+        showHud("ENV ENGAGED: ${env.title}")
+    }
+
+    // MPC Sampler Sound FX
+    fun triggerSamplerSound(soundType: String) {
+        audioEngine.triggerSamplerSound(soundType)
+        showHud("SAMPLER: $soundType")
+    }
+
+    // DJ Hot Cues & Pitch Bend
+    fun setHotCue(index: Int) {
+        audioEngine.setHotCue(index)
+        showHud("HOT CUE $index SAVED")
+    }
+
+    fun jumpToHotCue(index: Int) {
+        audioEngine.jumpToHotCue(index)
+        showHud("JUMP -> CUE $index")
+    }
+
+    fun nudgePitch(deltaPercent: Float) {
+        audioEngine.nudgePitch(deltaPercent)
+        showHud("PITCH NUDGE: ${if (deltaPercent > 0) "+" else ""}${deltaPercent.toInt()}%")
+    }
+
+    fun tapTempo() {
+        audioEngine.tapTempo()
+        val bpm = audioEngine.detectedBpm.value
+        showHud("TAP TEMPO: $bpm BPM")
+    }
+
+    // Modular Build-A-Machine
+    fun updateMachineSlot(slotIndex: Int, moduleName: String, icon: String) {
+        val current = _customMachineSlots.value.toMutableList()
+        val idx = current.indexOfFirst { it.slotIndex == slotIndex }
+        val newSlot = CustomMachineSlot(slotIndex, moduleName, icon)
+        if (idx >= 0) {
+            current[idx] = newSlot
+        } else {
+            current.add(newSlot)
+        }
+        _customMachineSlots.value = current
+        showHud("BAY ${slotIndex + 1} MOUNTED: $moduleName")
+    }
+
+    // Underground Rotary Telephone
+    fun dialTelephoneDigit(digit: Int) {
+        if (_telephoneNumber.value.length < 8) {
+            _telephoneNumber.value += digit.toString()
+            audioEngine.triggerSamplerSound("AIRHORN")
+        }
+    }
+
+    fun clearTelephoneNumber() {
+        _telephoneNumber.value = ""
+        showHud("LINE CLEARED")
+    }
+
+    fun callTelephoneHotline() {
+        val number = _telephoneNumber.value
+        val tracks = allTracks.value
+        if (tracks.isEmpty()) {
+            showHud("HOTLINE ERROR: NO AUDIO IN CRATE")
+            return
+        }
+
+        when (number) {
+            "99", "1999" -> {
+                showHud("HOTLINE CONNECTED: 1999 RAVE LINE")
+                val raveTracks = tracks.filter { it.year in 1990..1999 }.ifEmpty { tracks }
+                playTrack(raveTracks.random(), raveTracks)
+            }
+            "411", "00" -> {
+                showHud("HOTLINE CONNECTED: DEEP CUTS OPERATOR")
+                val deep = tracks.filter { it.durationMs >= 240000L }.ifEmpty { tracks }
+                playTrack(deep.random(), deep)
+            }
+            "808" -> {
+                showHud("HOTLINE CONNECTED: TR-808 HIP HOP LINE")
+                triggerSamplerSound("TR808_SNARE")
+                val hiphop = tracks.filter { it.genre.contains("Hip", ignoreCase = true) }.ifEmpty { tracks }
+                playTrack(hiphop.random(), hiphop)
+            }
+            "254" -> {
+                showHud("HOTLINE CONNECTED: NAIROBI GROOVES HOTLINE")
+                val afro = tracks.filter {
+                    it.genre.contains("Afro", ignoreCase = true) || it.genre.contains("Kenya", ignoreCase = true)
+                }.ifEmpty { tracks }
+                playTrack(afro.random(), afro)
+            }
+            else -> {
+                showHud("PULSE DIALED: $number -> DISPATCHING TRACK")
+                playTrack(tracks.random(), tracks.shuffled())
+            }
+        }
+    }
+
+    // Party Jukebox Mode
+    fun insertJukeboxCoin() {
+        _jukeboxCredits.value += 3
+        triggerSamplerSound("VINYL_BRAKE")
+        showHud("COIN INSERTED! +3 CREDITS (TOTAL: ${_jukeboxCredits.value})")
+    }
+
+    fun pressJukeboxKey(key: String) {
+        if (_isPartyLockoutActive.value) {
+            showHud("JUKEBOX LOCKED BY HOST")
+            return
+        }
+        val currentCode = _jukeboxSelectionCode.value
+        if (currentCode.length >= 2) {
+            _jukeboxSelectionCode.value = key
+        } else {
+            val newCode = currentCode + key
+            _jukeboxSelectionCode.value = newCode
+            if (newCode.length == 2) {
+                // Code complete (e.g. A1, B3, H8)
+                if (_jukeboxCredits.value <= 0) {
+                    showHud("INSERT COIN TO SELECT TRACK")
+                } else {
+                    _jukeboxCredits.value -= 1
+                    val tracks = allTracks.value
+                    if (tracks.isNotEmpty()) {
+                        val rowLetter = newCode[0].uppercaseChar()
+                        val colDigit = newCode[1].digitToIntOrNull() ?: 1
+                        val codeIndex = ((rowLetter - 'A') * 8 + (colDigit - 1)).coerceIn(0, tracks.size - 1)
+                        val chosenTrack = tracks[codeIndex % tracks.size]
+                        audioEngine.playTrack(chosenTrack, tracks)
+                        showHud("[$newCode] PLAYING: ${chosenTrack.title}")
+                    }
+                }
+            }
+        }
+    }
+
+    fun togglePartyLockout() {
+        val next = !_isPartyLockoutActive.value
+        _isPartyLockoutActive.value = next
+        showHud(if (next) "PARTY LOCKOUT: GUEST INPUT DISABLED" else "PARTY LOCKOUT: GUEST SELECTION OPEN")
+    }
+
+    // Library Scanner Operations
+    fun refreshLibrary(isIncremental: Boolean = false) {
+        viewModelScope.launch {
+            val count = repository.scanDeviceMusic(isIncremental = isIncremental)
+            showHud(if (count > 0) "SCAN COMPLETED: +$count TRACKS" else "SCAN COMPLETE: UP TO DATE")
+        }
+    }
+
+    fun importFolder(treeUri: Uri) {
+        viewModelScope.launch {
+            val count = repository.importFolderTree(treeUri)
+            showHud(if (count > 0) "FOLDER IMPORTED: +$count TRACKS" else "NO COMPATIBLE AUDIO FOUND")
+        }
+    }
+
+    // Folder Navigation
+    fun openFolder(path: String) {
+        _currentFolderPath.value = path
+        showHud("CRATE: ${path.substringAfterLast('/').ifBlank { "ROOT" }}")
+    }
+
+    fun navigateUpFolder() {
+        val cur = _currentFolderPath.value
+        if (cur.contains('/')) {
+            _currentFolderPath.value = cur.substringBeforeLast('/')
+        } else {
+            _currentFolderPath.value = ""
+        }
+    }
+
+    fun playFolder(folderPath: String) {
+        val tracks = allTracks.value.filter {
+            if (folderPath.isBlank()) true else it.path.startsWith(folderPath)
+        }
+        if (tracks.isNotEmpty()) {
+            audioEngine.playTrack(tracks.first(), tracks)
+            showHud("PLAYING FOLDER (${tracks.size} TRACKS)")
+        }
+    }
+
+    // Curated Categories & Crates
+    fun selectCuratedCategory(category: CuratedCategory) {
+        _selectedCuratedCategory.value = category
+        showHud("CATEGORY: ${category.title}")
+    }
+
+    fun getTracksForCategory(category: CuratedCategory, baseTracks: List<Track>): List<Track> {
+        return when (category) {
+            CuratedCategory.RECENTLY_ADDED -> baseTracks.sortedByDescending { it.dateAdded }
+            CuratedCategory.RECENTLY_PLAYED -> baseTracks.filter { it.lastPlayedMs > 0 }.sortedByDescending { it.lastPlayedMs }
+            CuratedCategory.MOST_PLAYED -> baseTracks.filter { it.replayCount > 0 }.sortedByDescending { it.replayCount }
+            CuratedCategory.FAVOURITES -> baseTracks.filter { it.isFavorite }
+            CuratedCategory.FORGOTTEN_TRACKS -> {
+                val cutoff = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000)
+                baseTracks.filter { it.lastPlayedMs < cutoff && it.replayCount < 3 }
+            }
+            CuratedCategory.LOSSLESS_AUDIO -> baseTracks.filter {
+                val fmt = it.audioFormat
+                fmt == "FLAC" || fmt == "WAV" || fmt == "AIFF"
+            }
+            CuratedCategory.EXTENDED_CUTS -> baseTracks.filter { it.durationMs >= 300000L }
+            CuratedCategory.INTERLUDES -> baseTracks.filter { it.durationMs in 1..120000L }
+        }
+    }
+
+    fun playCategory(category: CuratedCategory) {
+        val tracks = getTracksForCategory(category, allTracks.value)
+        if (tracks.isNotEmpty()) {
+            audioEngine.playTrack(tracks.first(), tracks)
+            showHud("PLAYING CRATE: ${category.title}")
+        }
+    }
+
+    // Genres & Multi-Genre
+    fun selectGenre(genre: String?) {
+        _selectedGenre.value = genre
+        showHud(if (genre != null) "GENRE: $genre" else "ALL GENRES")
+    }
+
+    fun playGenre(genre: String) {
+        val tracks = allTracks.value.filter { it.genreList.any { g -> g.equals(genre, ignoreCase = true) } }
+        if (tracks.isNotEmpty()) {
+            audioEngine.playTrack(tracks.first(), tracks)
+            showHud("PLAYING GENRE: $genre (${tracks.size})")
+        }
+    }
+
+    // Library Health Diagnostics & Duplicate Management
+    fun runLibraryHealthDiagnostics() {
+        viewModelScope.launch {
+            _libraryHealthReport.value = _libraryHealthReport.value.copy(isScanning = true)
+            val report = repository.analyzeLibraryHealth()
+            _libraryHealthReport.value = report
+            showHud("DIAGNOSTICS COMPLETE // HEALTH: ${report.healthScore}%")
+        }
+    }
+
+    fun deduplicateAll() {
+        viewModelScope.launch {
+            val count = repository.deduplicateLibrary(_libraryHealthReport.value.duplicateGroups)
+            runLibraryHealthDiagnostics()
+            showHud("REMOVED $count DUPLICATE COPIES")
+        }
+    }
+
+    fun purgeMissingFiles() {
+        viewModelScope.launch {
+            val count = repository.purgeMissingTracks(_libraryHealthReport.value.missingFiles)
+            runLibraryHealthDiagnostics()
+            showHud("PURGED $count MISSING TRACKS")
+        }
+    }
+
+    fun autoRepairLibrary() {
+        viewModelScope.launch {
+            val dupsCount = repository.deduplicateLibrary(_libraryHealthReport.value.duplicateGroups)
+            val missingCount = repository.purgeMissingTracks(_libraryHealthReport.value.missingFiles)
+            runLibraryHealthDiagnostics()
+            showHud("ARCHIVE REPAIRED // -$dupsCount DUPS // -$missingCount GHOSTS")
+        }
+    }
+
+    fun deleteTrack(trackId: Long) {
+        viewModelScope.launch {
+            repository.deleteTrack(trackId)
+            showHud("TRACK REMOVED FROM VAULT")
+        }
+    }
+
+    fun deleteSelectedTracks() {
+        val ids = _selectedTrackIds.value.toList()
+        if (ids.isNotEmpty()) {
+            viewModelScope.launch {
+                repository.deleteTracks(ids)
+                _selectedTrackIds.value = emptySet()
+                _isBulkMode.value = false
+                showHud("PURGED ${ids.size} TRACK(S)")
+            }
+        }
+    }
+
+    fun toggleBulkMode() {
+        _isBulkMode.value = !_isBulkMode.value
+        if (!_isBulkMode.value) {
+            _selectedTrackIds.value = emptySet()
+        }
+        showHud(if (_isBulkMode.value) "BULK SELECTION ARMED" else "BULK MODE DISENGAGED")
+    }
+
+    fun toggleTrackSelection(trackId: Long) {
+        val current = _selectedTrackIds.value.toMutableSet()
+        if (current.contains(trackId)) {
+            current.remove(trackId)
+        } else {
+            current.add(trackId)
+        }
+        _selectedTrackIds.value = current
+    }
+
+    fun selectAllTracks(tracks: List<Track>) {
+        _selectedTrackIds.value = tracks.map { it.id }.toSet()
+        showHud("SELECTED ALL ${tracks.size} TRACKS")
+    }
+
+    fun clearTrackSelection() {
+        _selectedTrackIds.value = emptySet()
     }
 
     private fun showHud(text: String) {

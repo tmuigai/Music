@@ -19,7 +19,8 @@ data class TrackEntity(
     val replayCount: Int = 0,
     val lastPlayedMs: Long = 0,
     val isFavorite: Boolean = false,
-    val customLyrics: String? = null
+    val customLyrics: String? = null,
+    val volumeGainOffsetDb: Float = 0.0f
 )
 
 @Entity(tableName = "mixtapes")
